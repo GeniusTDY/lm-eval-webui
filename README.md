@@ -67,7 +67,13 @@ git submodule update --remote third_party/pi-bench
 SWE Mini judging uses a Lemonade model from the configured
 OpenAI-compatible endpoint. The WebUI lets you choose the judge from the
 available model list and defaults to `gpt-oss-120b-mxfp-GGUF` when it is
-available.
+available. The runner retains at most the active and immediately preceding task
+images so Docker can reuse shared layers while the next image is pulled. It
+removes the preceding image after that task and the final image on exit or
+cancellation, preventing long runs from filling the Docker-in-Docker node
+filesystem. Set
+`SWE_MINI_KEEP_TASK_IMAGES=1` only when intentionally retaining the complete
+image cache and sufficient ephemeral storage is available.
 
 Override the submodule location with:
 

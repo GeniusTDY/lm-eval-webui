@@ -2010,6 +2010,100 @@ exit 2
         self.assertIn("enabled: false", patched_index)
         self.assertIn("maxRetries: 0", patched_index)
 
+    def test_wrapper_removes_task_images_without_discarding_shared_layers_early(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime"
+            (runtime / "src").mkdir(parents=True)
+            tasks_dir = runtime / "tasks"
+            tasks_dir.mkdir()
+            (runtime / "src" / "index.ts").write_text(
+                Path("third_party/pi-bench/src/index.ts").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            task_ids = ["django__django-cleanup-1", "django__django-cleanup-2"]
+            for task_id in task_ids:
+                (tasks_dir / f"{task_id}.json").write_text(
+                    json.dumps({"id": task_id, "repo": "django/django"}),
+                    encoding="utf-8",
+                )
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            fake_docker = bin_dir / "docker"
+            fake_docker.write_text(
+                """#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
+if [ "${1:-}" = "volume" ]; then
+    exit 0
+fi
+if [ "${1:-}" = "image" ]; then
+    exit 0
+fi
+if [ "${1:-}" = "run" ]; then
+    image=""
+    for argument in "$@"; do
+        case "$argument" in
+            test-registry.*:latest) image="$argument" ;;
+        esac
+    done
+    task_id="${image#test-registry.}"
+    task_id="${task_id%:latest}"
+    mkdir -p "$SWE_MINI_OUTPUT_PATH"
+    printf '{"task":"%s","durationMs":1,"diff":"ok","testExitCode":0,"judgeScore":1,"judgeRationale":"ok"}\\n' "$task_id" > "$SWE_MINI_OUTPUT_PATH/results-$task_id.json"
+    exit 0
+fi
+exit 1
+""",
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o755)
+            output_dir = runtime / "results"
+            docker_log = root / "docker.log"
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{bin_dir}:{env['PATH']}",
+                    "PI_BENCH_DIR": str(runtime),
+                    "PI_BENCH_RUN_DIR": str(runtime),
+                    "PI_BENCH_SKIP_CHOWN": "1",
+                    "SWE_BENCH_IMAGE_REGISTRY": "test-registry",
+                    "SWE_MINI_OUTPUT_PATH": str(output_dir),
+                    "LMEVAL_WEBUI_JOB_ID": "image-cleanup-test",
+                    "FAKE_DOCKER_LOG": str(docker_log),
+                }
+            )
+
+            completed = subprocess.run(
+                ["bash", "scripts/run-swe-mini.sh", str(tasks_dir)],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            summary = json.loads(
+                (output_dir / "summary.json").read_text(encoding="utf-8")
+            )
+            docker_calls = docker_log.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(summary["totalTasks"], 2)
+        self.assertEqual(summary["passedTasks"], 2)
+        second_run = next(
+            index
+            for index, call in enumerate(docker_calls)
+            if call.startswith("run ") and task_ids[1] in call
+        )
+        first_remove = docker_calls.index(
+            f"image rm test-registry.{task_ids[0]}:latest"
+        )
+        final_remove = docker_calls.index(
+            f"image rm test-registry.{task_ids[1]}:latest"
+        )
+        self.assertLess(second_run, first_remove)
+        self.assertLess(first_remove, final_remove)
+        self.assertIn("Removed unused SWE task image", completed.stdout)
+
     def test_wrapper_labels_and_cleans_up_cancelled_containers(self):
         script = Path("scripts/run-swe-mini.sh").read_text(encoding="utf-8")
 
@@ -2017,6 +2111,8 @@ exit 2
         self.assertIn("lm-eval-webui.job-id=$JOB_ID", script)
         self.assertIn("trap 'cancel_run 143' TERM", script)
         self.assertIn('docker rm -f "$ACTIVE_CONTAINER"', script)
+        self.assertIn('docker image rm "$image"', script)
+        self.assertIn("trap cleanup_run_resources EXIT", script)
 
     def test_wrapper_switches_pin_to_judge_and_restores_candidate(self):
         script = Path("scripts/run-swe-mini.sh").read_text(encoding="utf-8")

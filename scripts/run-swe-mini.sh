@@ -13,6 +13,8 @@ REGISTRY="${SWE_BENCH_IMAGE_REGISTRY:-ghcr.io/epoch-research/swe-bench.eval.x86_
 JOB_ID="${LMEVAL_WEBUI_JOB_ID:-manual-$$}"
 SAFE_JOB_ID="$(printf '%s' "$JOB_ID" | tr -c 'A-Za-z0-9_.-' '-')"
 ACTIVE_CONTAINER=""
+ACTIVE_TASK_IMAGE=""
+RETAINED_TASK_IMAGE=""
 RESULTS_DIR=""
 SUMMARY_GENERATED=false
 
@@ -23,10 +25,47 @@ cleanup_active_container() {
   fi
 }
 
+cleanup_task_image() {
+  local image="${1:-}"
+  if [ -z "$image" ] || [ "${SWE_MINI_KEEP_TASK_IMAGES:-0}" = "1" ]; then
+    return 0
+  fi
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    return 0
+  fi
+  if docker image rm "$image" >/dev/null 2>&1; then
+    printf '[INFO] Removed unused SWE task image %s.\n' "$image"
+  else
+    printf '[WARN] Could not remove unused SWE task image %s.\n' "$image" >&2
+  fi
+}
+
+# Keep one completed image until the next task finishes so its pull can reuse
+# shared layers without allowing images from the full suite to accumulate.
+retain_task_image() {
+  local image="$1"
+  if [ -n "$RETAINED_TASK_IMAGE" ] && [ "$RETAINED_TASK_IMAGE" != "$image" ]; then
+    cleanup_task_image "$RETAINED_TASK_IMAGE"
+  fi
+  RETAINED_TASK_IMAGE="$image"
+  ACTIVE_TASK_IMAGE=""
+}
+
+cleanup_run_resources() {
+  local active_image="$ACTIVE_TASK_IMAGE"
+  cleanup_active_container
+  cleanup_task_image "$active_image"
+  if [ "$RETAINED_TASK_IMAGE" != "$active_image" ]; then
+    cleanup_task_image "$RETAINED_TASK_IMAGE"
+  fi
+  ACTIVE_TASK_IMAGE=""
+  RETAINED_TASK_IMAGE=""
+}
+
 cancel_run() {
   local exit_code="$1"
   trap - EXIT INT TERM
-  cleanup_active_container
+  cleanup_run_resources
   generate_aggregate_summary || true
   exit "$exit_code"
 }
@@ -216,7 +255,7 @@ sys.exit(1)
 PY
 }
 
-trap cleanup_active_container EXIT
+trap cleanup_run_resources EXIT
 trap 'cancel_run 130' INT
 trap 'cancel_run 143' TERM
 
@@ -857,6 +896,7 @@ import os, sys
 print(os.path.relpath(sys.argv[1], sys.argv[2]))
 PY
   )"
+  ACTIVE_TASK_IMAGE="$IMAGE"
 
   for ATTEMPT in $(seq 1 "$PASS_COUNT"); do
     if [ "$PASS_COUNT" -gt 1 ]; then
@@ -1008,6 +1048,7 @@ PY
     FAILED=$((FAILED + 1))
     echo "[WARN] Task $TASK_ID failed"
   fi
+  retain_task_image "$IMAGE"
 done
 
 printf '\n========================================================\n'
