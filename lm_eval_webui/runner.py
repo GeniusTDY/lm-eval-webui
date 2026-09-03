@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .lemonade import DEFAULT_OPENAI_BASE_URL, openai_api_url
+from .offline import build_offline_launch_env
 
 DEFAULT_LEMONADE_BASE_URL = DEFAULT_OPENAI_BASE_URL
 DEFAULT_LM_EVAL_PYTHON_CANDIDATES = (
@@ -65,7 +66,7 @@ def build_eval_command(
         raise ValueError("At least one task is required")
 
     root = Path(project_root) if project_root is not None else Path.cwd()
-    env = os.environ.copy()
+    env = build_offline_launch_env(os.environ.copy())
     env["PYTHONPATH"] = (
         str(root)
         if not env.get("PYTHONPATH")

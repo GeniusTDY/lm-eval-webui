@@ -210,6 +210,7 @@ _CATEGORY_ORDER = [
     "Reasoning",
     "Math",
     "Coding / Structured Output",
+    "LiveCodeBench",
     "Instruction Following",
     "Other",
 ]
@@ -220,6 +221,8 @@ _TASK_CATEGORIES = {
     "gsm8k": "Math",
     "jsonschema_bench_easy": "Coding / Structured Output",
     "ifeval": "Instruction Following",
+    "livecodebench": "LiveCodeBench",
+    "livecodebench_local": "LiveCodeBench",
 }
 _TASK_CATEGORY_PATTERNS = [
     ("Math", ("gsm8k", "math", "aime", "amc", "minerva")),
@@ -245,6 +248,8 @@ _TASK_SCORE_METRICS = {
     ],
     "arc_challenge_chat": ["exact_match,remove_whitespace"],
     "jsonschema_bench_easy": ["schema_compliance,none"],
+    "livecodebench": ["pass@1"],
+    "livecodebench_local": ["pass@1"],
 }
 _FALLBACK_METRIC_BASES = (
     "acc_norm",

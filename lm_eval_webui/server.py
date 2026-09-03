@@ -114,6 +114,7 @@ GATED_DATASET_PATHS = {
     "gplsi/truthfulqa_va",
 }
 COMPATIBLE_TASK_NAMES = {
+    "livecodebench",
     "jsonschema_bench",
     "bigbench_bbq_lite_json_generate_until",
     "bigbench_code_line_description_generate_until",

@@ -10,58 +10,96 @@
     <header>
       <div>
         <h1>Lemonade Benchmark WebUI</h1>
-        <p>
+        <p data-i18n="Run Lemonade Bench, lm-eval, or SWE Mini against installed models and compare each suite on its own leaderboard.">
           Run Lemonade Bench, lm-eval, or SWE Mini against installed models and
           compare each suite on its own leaderboard.
         </p>
       </div>
-      <button id="refreshAll" type="button">Refresh</button>
+      <div class="header-controls">
+        <button id="refreshAll" type="button" data-i18n="Refresh">
+          Refresh
+        </button>
+      </div>
     </header>
 
     <main>
       <section class="card setup">
-        <h2>Benchmark setup</h2>
+        <h2 data-i18n="Benchmark setup">Benchmark setup</h2>
         <div class="grid">
           <label
-            >OpenAI-compatible base URL
+            ><span data-i18n="OpenAI-compatible base URL"
+              >OpenAI-compatible base URL</span
+            >
             <input id="openaiBaseUrl" value="http://localhost:11434/v1" />
           </label>
         </div>
         <div class="grid two tall">
           <div class="selector-panel">
             <div class="row between list-header">
-              <h3>Installed models</h3>
-              <button id="refreshModels" type="button">Refresh models</button>
+              <h3 data-i18n="Installed models">Installed models</h3>
+              <button
+                id="refreshModels"
+                type="button"
+                data-i18n="Refresh models"
+              >
+                Refresh models
+              </button>
             </div>
             <label
-              >Filter models
-              <input id="modelFilter" placeholder="Type to search models"
+              ><span data-i18n="Filter models">Filter models</span>
+              <input
+                id="modelFilter"
+                data-i18n-placeholder="Type to search models"
+                placeholder="Type to search models"
             /></label>
             <p id="modelCount" class="hint"></p>
-            <div id="modelList" class="list empty">Loading models…</div>
+            <div id="modelList" class="list empty">
+              <span data-i18n="Loading models…">Loading models…</span>
+            </div>
           </div>
           <div class="selector-panel">
-            <div class="suite-tabs" role="tablist" aria-label="Benchmark suite">
+            <div
+              class="suite-tabs"
+              role="tablist"
+              data-i18n-aria-label="Benchmark suite"
+              aria-label="Benchmark suite"
+            >
               <button
                 id="suiteLemonadeBench"
                 class="active"
                 type="button"
                 data-suite="lemonade_bench"
+                data-i18n="Lemonade Bench scenarios"
               >
                 Lemonade Bench scenarios
               </button>
-              <button id="suiteLmEval" type="button" data-suite="lm_eval">
+              <button
+                id="suiteLmEval"
+                type="button"
+                data-suite="lm_eval"
+                data-i18n="lm-eval tasks"
+              >
                 lm-eval tasks
               </button>
-              <button id="suiteSweMini" type="button" data-suite="swe_mini">
+              <button
+                id="suiteSweMini"
+                type="button"
+                data-suite="swe_mini"
+                data-i18n="SWE Mini tasks"
+              >
                 SWE Mini tasks
               </button>
             </div>
             <div id="lmEvalProfilePicker" class="profile-picker" hidden>
               <div class="row between profile-picker-header">
                 <div>
-                  <h3>Balanced benchmark profiles</h3>
-                  <p class="hint">
+                  <h3 data-i18n="Balanced benchmark profiles">
+                    Balanced benchmark profiles
+                  </h3>
+                  <p
+                    class="hint"
+                    data-i18n="Apply a repeatable task set and benchmark recipe without changing the selected models or runtime backend."
+                  >
                     Apply a repeatable task set and benchmark recipe without
                     changing the selected models or runtime backend.
                   </p>
@@ -70,25 +108,48 @@
                   id="activeBenchmarkProfile"
                   class="badge profile custom"
                   aria-live="polite"
+                  data-i18n="Profile: Custom"
                   >Profile: Custom</span
                 >
               </div>
               <div id="lmEvalProfileButtons" class="row profile-buttons"></div>
             </div>
             <div class="row between list-header">
-              <h3 id="taskPanelTitle">Lemonade Bench scenarios</h3>
+              <h3
+                id="taskPanelTitle"
+                data-i18n="Lemonade Bench scenarios"
+              >
+                Lemonade Bench scenarios
+              </h3>
               <div class="row list-actions">
-                <button id="selectVisibleTasks" type="button" disabled>
+                <button
+                  id="selectVisibleTasks"
+                  type="button"
+                  disabled
+                  data-i18n="Select visible"
+                >
                   Select visible
                 </button>
-                <button id="unselectVisibleTasks" type="button" disabled>
+                <button
+                  id="unselectVisibleTasks"
+                  type="button"
+                  disabled
+                  data-i18n="Unselect visible"
+                >
                   Unselect visible
                 </button>
-                <label id="taskViewModeControl" class="task-view-mode" hidden
-                  >Task view
+                <label
+                  id="taskViewModeControl"
+                  class="task-view-mode"
+                  hidden
+                  ><span data-i18n="Task view">Task view</span>
                   <select id="taskViewMode">
-                    <option value="leaves" selected>Leaf tasks</option>
-                    <option value="groups">Groups / tags</option>
+                    <option value="leaves" selected data-i18n="Leaf tasks">
+                      Leaf tasks
+                    </option>
+                    <option value="groups" data-i18n="Groups / tags">
+                      Groups / tags
+                    </option>
                   </select></label
                 >
                 <span
@@ -97,43 +158,52 @@
                   aria-live="polite"
                 >
                   <span class="spinner" aria-hidden="true"></span>
-                  Loading tasks…
+                  <span data-i18n="Loading tasks…">Loading tasks…</span>
                 </span>
               </div>
             </div>
             <label
-              >Filter tasks
+              ><span data-i18n="Filter tasks">Filter tasks</span>
               <input
                 id="taskFilter"
+                data-i18n-placeholder="Type to search benchmark scenarios"
                 placeholder="Type to search benchmark scenarios"
             /></label>
             <p id="taskCount" class="hint"></p>
             <div id="taskList" class="list"></div>
             <div class="row pager">
-              <button id="taskPrev" type="button">Previous</button>
+              <button id="taskPrev" type="button" data-i18n="Previous">
+                Previous
+              </button>
               <span id="taskPage" class="hint"></span>
-              <button id="taskNext" type="button">Next</button>
+              <button id="taskNext" type="button" data-i18n="Next">
+                Next
+              </button>
             </div>
             <div id="lmEvalCategoryFilters" class="row task-filters" hidden>
               <label class="check compact"
                 ><input id="taskCategoryReasoning" type="checkbox" checked />
-                Reasoning</label
+                <span data-i18n="Reasoning">Reasoning</span></label
               >
               <label class="check compact"
                 ><input id="taskCategoryMath" type="checkbox" checked />
-                Math</label
+                <span data-i18n="Math">Math</span></label
               >
               <label class="check compact"
                 ><input id="taskCategoryCoding" type="checkbox" checked />
-                Coding / Structured Output</label
+                <span data-i18n="Coding / Structured Output"
+                  >Coding / Structured Output</span
+                ></label
               >
               <label class="check compact"
                 ><input id="taskCategoryInstruction" type="checkbox" checked />
-                Instruction Following</label
+                <span data-i18n="Instruction Following"
+                  >Instruction Following</span
+                ></label
               >
               <label class="check compact"
                 ><input id="taskCategoryOther" type="checkbox" checked />
-                Other</label
+                <span data-i18n="Other">Other</span></label
               >
             </div>
             <div
@@ -143,40 +213,60 @@
             >
               <label class="check compact"
                 ><input id="hideIncompatibleTasks" type="checkbox" checked />
-                hide incompatible</label
+                <span data-i18n="hide incompatible">hide incompatible</span></label
               >
               <label class="check compact"
-                ><input id="hideGatedTasks" type="checkbox" checked /> hide
-                gated</label
+                ><input id="hideGatedTasks" type="checkbox" checked />
+                <span data-i18n="hide gated">hide gated</span></label
               >
               <label class="check compact"
-                ><input id="hideNonEnglishTasks" type="checkbox" checked /> hide
-                non-English</label
+                ><input id="hideNonEnglishTasks" type="checkbox" checked />
+                <span data-i18n="hide non-English">hide non-English</span></label
               >
             </div>
-            <p id="taskHint" class="hint">
+            <p
+              id="taskHint"
+              class="hint"
+              data-i18n="Lemonade Bench measures TTFT, token throughput, request duration, and memory use. Long-context scenarios are opt-in and can run for a long time."
+            >
               Lemonade Bench measures TTFT, token throughput, request duration,
               and memory use. Long-context scenarios are opt-in and can run for
               a long time.
             </p>
             <div class="selected-panel">
               <div class="row between">
-                <h3 id="selectedWorkItemsTitle">Selected scenarios</h3>
+                <h3
+                  id="selectedWorkItemsTitle"
+                  data-i18n="Selected scenarios"
+                >
+                  Selected scenarios
+                </h3>
                 <span id="selectedTaskCount" class="hint"></span>
               </div>
-              <div id="selectedTasksList" class="selected-list empty">
+              <div
+                id="selectedTasksList"
+                class="selected-list empty"
+                data-i18n="No scenarios selected."
+              >
                 No scenarios selected.
               </div>
             </div>
           </div>
         </div>
         <details id="modelRuntimeOptions" hidden>
-          <summary>Model runtime options</summary>
+          <summary data-i18n="Model runtime options">
+            Model runtime options
+          </summary>
           <div class="grid four">
             <label
-              >llama.cpp backend
+              ><span data-i18n="llama.cpp backend">llama.cpp backend</span>
               <select id="llamacppBackend">
-                <option value="">Auto / endpoint default</option>
+                <option
+                  value=""
+                  data-i18n="Auto / endpoint default"
+                >
+                  Auto / endpoint default
+                </option>
                 <option value="system">system</option>
                 <option value="vulkan">vulkan</option>
                 <option value="rocm">rocm</option>
@@ -185,88 +275,121 @@
           </div>
         </details>
         <details>
-          <summary>Benchmark options</summary>
+          <summary data-i18n="Benchmark options">Benchmark options</summary>
           <div id="lemonadeBenchOptions" class="grid four">
             <label
-              >Backends (blank = each model's configured backend)
-              <input id="benchBackends" placeholder="Override: rocm, vulkan" />
+              ><span
+                data-i18n="Backends (blank = each model's configured backend)"
+                >Backends (blank = each model's configured backend)</span
+              >
+              <input
+                id="benchBackends"
+                data-i18n-placeholder="Override: rocm, vulkan"
+                placeholder="Override: rocm, vulkan"
+              />
             </label>
             <label
-              >Context sizes (blank = model default)
+              ><span data-i18n="Context sizes (blank = model default)"
+                >Context sizes (blank = model default)</span
+              >
               <input
                 id="benchContextSizes"
+                data-i18n-placeholder="Example: 4096, 32768"
                 placeholder="Example: 4096, 32768"
               />
             </label>
             <label
-              >Measurement runs
+              ><span data-i18n="Measurement runs">Measurement runs</span>
               <input id="benchRuns" type="number" min="1" value="3" />
             </label>
             <label
-              >Warmup runs
+              ><span data-i18n="Warmup runs">Warmup runs</span>
               <input id="benchWarmup" type="number" min="0" value="0" />
             </label>
             <label
-              >Request timeout seconds
+              ><span data-i18n="Request timeout seconds"
+                >Request timeout seconds</span
+              >
               <input id="benchTimeout" type="number" min="1" value="1800" />
             </label>
             <label class="check"
-              ><input id="benchMemoryTracking" type="checkbox" checked /> Track
-              VRAM and RAM</label
+              ><input id="benchMemoryTracking" type="checkbox" checked />
+              <span data-i18n="Track VRAM and RAM">Track VRAM and RAM</span></label
             >
             <label class="check"
               ><input id="benchReloadBetweenRuns" type="checkbox" checked />
-              Reload between runs</label
+              <span data-i18n="Reload between runs"
+                >Reload between runs</span
+              ></label
             >
             <label class="check"
-              ><input id="benchLogResponses" type="checkbox" /> Save response
-              log</label
+              ><input id="benchLogResponses" type="checkbox" />
+              <span data-i18n="Save response log">Save response log</span></label
             >
           </div>
           <div id="lmEvalBenchmarkOptions" class="grid four" hidden>
             <label
-              >Limit (blank = all) <input id="limit" placeholder="All samples"
+              ><span data-i18n="Limit (blank = all)">Limit (blank = all)</span>
+              <input
+                id="limit"
+                data-i18n-placeholder="All samples"
+                placeholder="All samples"
             /></label>
             <label
-              >Few-shot (blank = task default)
-              <input id="numFewshot" type="number" placeholder="Task default"
+              ><span data-i18n="Few-shot (blank = task default)"
+                >Few-shot (blank = task default)</span
+              >
+              <input
+                id="numFewshot"
+                type="number"
+                data-i18n-placeholder="Task default"
+                placeholder="Task default"
             /></label>
             <label
-              >Generation token limit
+              ><span data-i18n="Generation token limit"
+                >Generation token limit</span
+              >
               <input id="maxGenToks" type="number" value="32768" min="1"
             /></label>
             <label
-              >Timeout seconds
+              ><span data-i18n="Timeout seconds">Timeout seconds</span>
               <input id="timeout" type="number" value="7200" min="1"
             /></label>
             <label
-              >Concurrent requests
+              ><span data-i18n="Concurrent requests">Concurrent requests</span>
               <input id="numConcurrent" type="number" value="1"
             /></label>
             <label
-              >Concurrent jobs
+              ><span data-i18n="Concurrent jobs">Concurrent jobs</span>
               <input id="maxConcurrentJobs" type="number" min="1" value="1"
             /></label>
-            <label>Batch size <input id="batchSize" value="1" /></label>
             <label
-              >Task batch size
-              <input id="taskBatchSize" type="number" min="1" value="1" />
-            </label>
+              ><span data-i18n="Batch size">Batch size</span>
+              <input id="batchSize" value="1" /></label>
+            <label
+              ><span data-i18n="Task batch size">Task batch size</span>
+              <input id="taskBatchSize" type="number" min="1" value="1"
+            /></label>
             <label class="check"
-              ><input id="applyChatTemplate" type="checkbox" checked /> Apply
-              chat template</label
+              ><input id="applyChatTemplate" type="checkbox" checked />
+              <span data-i18n="Apply chat template"
+                >Apply chat template</span
+              ></label
             >
             <label class="check"
-              ><input id="fewshotAsMultiturn" type="checkbox" /> Few-shot as
-              multiturn</label
+              ><input id="fewshotAsMultiturn" type="checkbox" />
+              <span data-i18n="Few-shot as multiturn"
+                >Few-shot as multiturn</span
+              ></label
             >
             <label class="check"
-              ><input id="logSamples" type="checkbox" /> Log samples</label
+              ><input id="logSamples" type="checkbox" />
+              <span data-i18n="Log samples">Log samples</span></label
             >
           </div>
           <div id="sweMiniBenchmarkOptions" class="grid four" hidden>
             <label
-              >Judge model
+              ><span data-i18n="Judge model">Judge model</span>
               <select id="sweJudgeModel">
                 <option value="gpt-oss-120b-mxfp-GGUF" selected>
                   gpt-oss-120b-mxfp-GGUF
@@ -274,15 +397,15 @@
               </select>
             </label>
             <label
-              >Timeout minutes
+              ><span data-i18n="Timeout minutes">Timeout minutes</span>
               <input id="sweTimeout" type="number" min="1" value="60" />
             </label>
             <label
-              >Pass attempts
+              ><span data-i18n="Pass attempts">Pass attempts</span>
               <input id="swePassCount" type="number" min="1" value="1" />
             </label>
             <label
-              >Context window
+              ><span data-i18n="Context window">Context window</span>
               <input
                 id="sweContextWindow"
                 type="number"
@@ -291,7 +414,9 @@
               />
             </label>
             <label
-              >Maximum output tokens
+              ><span data-i18n="Maximum output tokens"
+                >Maximum output tokens</span
+              >
               <input
                 id="sweMaxOutputTokens"
                 type="number"
@@ -300,19 +425,28 @@
               />
             </label>
             <label
-              >Provider timeout minutes
+              ><span data-i18n="Provider timeout minutes"
+                >Provider timeout minutes</span
+              >
               <input id="sweProviderTimeout" type="number" min="1" value="15" />
             </label>
             <label
-              >Provider retries
+              ><span data-i18n="Provider retries">Provider retries</span>
               <input id="sweProviderRetries" type="number" value="0" disabled />
             </label>
             <label class="check"
               ><input id="sweRecipePolicy" type="checkbox" checked disabled />
-              Use Lemonade recipe unchanged</label
+              <span data-i18n="Use Lemonade recipe unchanged"
+                >Use Lemonade recipe unchanged</span
+              ></label
             >
           </div>
-          <p id="sweMiniJudgeHint" class="hint" hidden>
+          <p
+            id="sweMiniJudgeHint"
+            class="hint"
+            hidden
+            data-i18n="SWE Mini uses client-side context, output, and timeout limits. It loads the selected candidate and judge as configured but never overrides or saves Lemonade recipe, backend, slot, or MTP options."
+          >
             SWE Mini uses client-side context, output, and timeout limits. It
             loads the selected candidate and judge as configured but never
             overrides or saves Lemonade recipe, backend, slot, or MTP options.
@@ -320,7 +454,7 @@
         </details>
         <div class="row actions">
           <button id="startJobs" class="primary" type="button">
-            Run benchmark</button
+            <span data-i18n="Run benchmark">Run benchmark</span></button
           ><span id="setupMessage" class="message"></span>
         </div>
       </section>
@@ -328,135 +462,194 @@
       <section class="card">
         <div class="row between">
           <div>
-            <h2>Leaderboard</h2>
-            <p id="leaderboardDescription">
+            <h2 data-i18n="Leaderboard">Leaderboard</h2>
+            <p
+              id="leaderboardDescription"
+              data-i18n="Lemonade Bench compares average TTFT, token throughput, duration, and peak memory for each backend/context combination. Select any column heading to sort; select it again to reverse the order."
+            >
               Lemonade Bench compares average TTFT, token throughput, duration,
               and peak memory for each backend/context combination. Select any
               column heading to sort; select it again to reverse the order.
             </p>
           </div>
           <label id="resultProfileControl" class="profile-filter" hidden
-            >Profile
+            ><span data-i18n="Profile">Profile</span>
             <select id="resultProfileFilter">
-              <option value="all">All profiles</option>
+              <option value="all" data-i18n="All profiles">All profiles</option>
             </select></label
           >
         </div>
-        <div class="suite-tabs" role="tablist" aria-label="Leaderboard suite">
+        <div
+          class="suite-tabs"
+          role="tablist"
+          data-i18n-aria-label="Leaderboard suite"
+          aria-label="Leaderboard suite"
+        >
           <button
             id="leaderboardLemonadeBench"
             class="active"
             type="button"
             data-suite="lemonade_bench"
+            data-i18n="Lemonade Bench leaderboard"
           >
             Lemonade Bench leaderboard
           </button>
-          <button id="leaderboardLmEval" type="button" data-suite="lm_eval">
+          <button
+            id="leaderboardLmEval"
+            type="button"
+            data-suite="lm_eval"
+            data-i18n="lm-eval leaderboard"
+          >
             lm-eval leaderboard
           </button>
-          <button id="leaderboardSweMini" type="button" data-suite="swe_mini">
+          <button
+            id="leaderboardSweMini"
+            type="button"
+            data-suite="swe_mini"
+            data-i18n="SWE Mini leaderboard"
+          >
             SWE Mini leaderboard
           </button>
         </div>
         <div id="leaderboard" class="leaderboard empty">
-          No leaderboard results yet.
+          <span data-i18n="No leaderboard results yet."
+            >No leaderboard results yet.</span
+          >
         </div>
       </section>
 
       <section class="card">
         <details id="resultDetails">
-          <summary id="resultDetailsSummary">
+          <summary
+            id="resultDetailsSummary"
+            data-i18n="Lemonade Bench detailed metric comparison"
+          >
             Lemonade Bench detailed metric comparison
           </summary>
           <div class="detail-header detail-results-header">
-            <h2 id="detailResultsTitle">Lemonade Bench detailed results</h2>
+            <h2
+              id="detailResultsTitle"
+              data-i18n="Lemonade Bench detailed results"
+            >
+              Lemonade Bench detailed results
+            </h2>
             <div
               class="detail-filter-grid"
+              data-i18n-aria-label="Detailed result filters"
               aria-label="Detailed result filters"
             >
               <details class="detail-filter" data-detail-filter="models">
                 <summary>
-                  <span id="detailModelSummary">Models: All</span>
+                  <span id="detailModelSummary" data-i18n="Models: All"
+                    >Models: All</span
+                  >
                 </summary>
                 <div
                   id="detailModelOptions"
                   class="detail-filter-menu"
                   role="group"
+                  data-i18n-aria-label="Models tested"
                   aria-label="Models tested"
                 ></div>
               </details>
               <details class="detail-filter" data-detail-filter="tasks">
                 <summary>
-                  <span id="detailTaskSummary">Scenarios: All</span>
+                  <span id="detailTaskSummary" data-i18n="Scenarios: All"
+                    >Scenarios: All</span
+                  >
                 </summary>
                 <div
                   id="detailTaskOptions"
                   class="detail-filter-menu"
                   role="group"
+                  data-i18n-aria-label="Scenarios or tasks run"
                   aria-label="Scenarios or tasks run"
                 ></div>
               </details>
               <details class="detail-filter" data-detail-filter="metrics">
                 <summary>
-                  <span id="detailMetricSummary">Metrics: First available</span>
+                  <span
+                    id="detailMetricSummary"
+                    data-i18n="Metrics: First available"
+                    >Metrics: First available</span
+                  >
                 </summary>
                 <div
                   id="detailMetricOptions"
                   class="detail-filter-menu"
                   role="group"
+                  data-i18n-aria-label="Metrics for selected tasks"
                   aria-label="Metrics for selected tasks"
                 ></div>
               </details>
             </div>
           </div>
-          <div id="chart" class="chart empty">No numeric results yet.</div>
+          <div id="chart" class="chart empty">
+            <span data-i18n="No numeric results yet."
+              >No numeric results yet.</span
+            >
+          </div>
           <div id="resultTable" class="table-wrap"></div>
         </details>
       </section>
 
       <section class="card jobs-panel">
         <details>
-          <summary>Jobs</summary>
+          <summary data-i18n="Jobs">Jobs</summary>
           <div class="row between detail-header">
-            <h2>Jobs</h2>
+            <h2 data-i18n="Jobs">Jobs</h2>
             <div class="row job-actions">
               <label class="job-suite-filter"
-                >Show
+                ><span data-i18n="Show">Show</span>
                 <select
                   id="jobSuiteFilter"
+                  data-i18n-aria-label="Filter jobs by benchmark suite"
                   aria-label="Filter jobs by benchmark suite"
                 >
-                  <option value="all" selected>All jobs</option>
+                  <option value="all" selected data-i18n="All jobs">
+                    All jobs
+                  </option>
                   <option value="lemonade_bench">Lemonade Bench</option>
                   <option value="lm_eval">lm-eval</option>
                   <option value="swe_mini">SWE Mini</option>
                 </select>
               </label>
-              <span id="visibleJobCount" class="hint">0 jobs</span>
-              <label class="check compact"
-                ><input id="selectAllJobs" type="checkbox" /> Select all visible
-                jobs</label
+              <span id="visibleJobCount" class="hint" data-i18n="0 jobs"
+                >0 jobs</span
               >
-              <span id="selectedJobCount" class="hint">0 selected</span>
+              <label class="check compact"
+                ><input id="selectAllJobs" type="checkbox" />
+                <span data-i18n="Select all visible jobs"
+                  >Select all visible jobs</span
+                ></label
+              >
+              <span id="selectedJobCount" class="hint" data-i18n="0 selected"
+                >0 selected</span
+              >
               <button id="cancelSelectedJobs" type="button" disabled>
-                Cancel active
+                <span data-i18n="Cancel active">Cancel active</span>
               </button>
               <button id="clearSelectedJobs" type="button" disabled>
-                Clear selected
+                <span data-i18n="Clear selected">Clear selected</span>
               </button>
               <button id="rerunSelectedJobs" type="button" disabled>
-                Rerun selected
+                <span data-i18n="Rerun selected">Rerun selected</span>
               </button>
               <button id="clearFailedJobs" type="button">
-                Clear failed jobs
+                <span data-i18n="Clear failed jobs">Clear failed jobs</span>
               </button>
-              <button id="refreshJobs" type="button">Refresh jobs</button>
+              <button id="refreshJobs" type="button">
+                <span data-i18n="Refresh jobs">Refresh jobs</span>
+              </button>
             </div>
           </div>
-          <div id="jobList" class="jobs empty">No jobs yet.</div>
+          <div id="jobList" class="jobs empty">
+            <span data-i18n="No jobs yet.">No jobs yet.</span>
+          </div>
         </details>
       </section>
     </main>
+    <script src="/i18n.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

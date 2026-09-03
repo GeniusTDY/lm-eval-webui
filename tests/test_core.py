@@ -158,6 +158,132 @@ class OpenAICompatibleEndpointTests(unittest.TestCase):
         self.assertIn("llamacpp_backend=vulkan", command)
 
 
+class OfflineBundleTests(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        offline = import_module("lm_eval_webui.offline")
+        self.offline = offline
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.bundle_root = root
+        self.marker = root / "READY"
+        hf_home = root / "hf-home"
+        hf_home.mkdir()
+        for attribute, replacement in (
+            ("OFFLINE_ROOT", root),
+            ("OFFLINE_HF_HOME", hf_home),
+            ("OFFLINE_READY_MARKER", self.marker),
+            ("OFFLINE_LIVECODEBENCH_DATA", root / "livecodebench" / "lcb.jsonl"),
+            ("OFFLINE_NLTK_DATA", root / "nltk_data"),
+        ):
+            patcher = mock.patch.object(offline, attribute, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        # Keep tests hermetic: never touch the installed lm-eval task YAML.
+        yaml_patcher = mock.patch.object(
+            offline, "_installed_livecodebench_yaml", return_value=None
+        )
+        yaml_patcher.start()
+        self.addCleanup(yaml_patcher.stop)
+
+    def test_env_unchanged_without_ready_marker(self):
+        env = {"PATH": "/bin", "HF_HOME": "/custom/hf"}
+        result = self.offline.apply_offline_env(dict(env))
+
+        self.assertEqual(result, env)
+
+    def test_env_switches_to_bundle_cache_with_ready_marker(self):
+        self.marker.write_text("offline bundle\n", encoding="utf-8")
+
+        result = self.offline.apply_offline_env({"PATH": "/bin"})
+
+        self.assertEqual(result["HF_HOME"], str(self.bundle_root / "hf-home"))
+        self.assertEqual(result["HF_HUB_OFFLINE"], "1")
+        self.assertEqual(result["HF_DATASETS_OFFLINE"], "1")
+        self.assertEqual(result["TRANSFORMERS_OFFLINE"], "1")
+        self.assertEqual(result["SWE_MINI_KEEP_TASK_IMAGES"], "1")
+        self.assertNotIn("NLTK_DATA", result)
+        self.assertEqual(result["PATH"], "/bin")
+
+    def test_env_points_nltk_data_at_bundle_when_present(self):
+        self.marker.write_text("offline bundle\n", encoding="utf-8")
+        nltk_data = self.bundle_root / "nltk_data"
+        (nltk_data / "tokenizers").mkdir(parents=True)
+
+        result = self.offline.apply_offline_env(
+            {"PATH": "/bin", "NLTK_DATA": "/preexisting"}
+        )
+
+        self.assertEqual(result["NLTK_DATA"], f"{nltk_data}{os.pathsep}/preexisting")
+
+    def test_build_eval_command_injects_offline_environment(self):
+        EvalRequest = symbol("lm_eval_webui.runner", "EvalRequest")
+        build_eval_command = symbol("lm_eval_webui.runner", "build_eval_command")
+        self.marker.write_text("offline bundle\n", encoding="utf-8")
+
+        _command, env = build_eval_command(
+            EvalRequest(model_id="Model-A", tasks=["gsm8k"], output_path="out"),
+            project_root=str(self.bundle_root),
+        )
+
+        self.assertEqual(env["HF_HOME"], str(self.bundle_root / "hf-home"))
+        self.assertEqual(env["HF_HUB_OFFLINE"], "1")
+        self.assertEqual(env["TRANSFORMERS_OFFLINE"], "1")
+
+    def test_livecodebench_local_yaml_redirected_to_bundle_data(self):
+        self.marker.write_text("offline bundle\n", encoding="utf-8")
+        lcb_data = self.bundle_root / "livecodebench" / "lcb.jsonl"
+        lcb_data.parent.mkdir(parents=True, exist_ok=True)
+        lcb_data.write_text('{"question_id": 1}\n', encoding="utf-8")
+        task_yaml = self.bundle_root / "livecodebench_local.yaml"
+        task_yaml.write_text(
+            "task: livecodebench_local\n"
+            "dataset_path: json\n"
+            "dataset_kwargs:\n"
+            "  data_files:\n"
+            "    test: /old/packaging-machine/lcb.jsonl\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(
+            self.offline, "_installed_livecodebench_yaml", return_value=task_yaml
+        ):
+            redirected = self.offline.ensure_livecodebench_local_data()
+
+        self.assertEqual(redirected, lcb_data)
+        self.assertIn(
+            f"test: {lcb_data.resolve()}", task_yaml.read_text(encoding="utf-8")
+        )
+
+        # Rewriting is idempotent: a second call keeps the same target.
+        with mock.patch.object(
+            self.offline, "_installed_livecodebench_yaml", return_value=task_yaml
+        ):
+            self.offline.ensure_livecodebench_local_data()
+        self.assertEqual(task_yaml.read_text(encoding="utf-8").count(str(lcb_data.resolve())), 1)
+
+    def test_livecodebench_redirection_requires_bundle_data(self):
+        task_yaml = self.bundle_root / "livecodebench_local.yaml"
+        task_yaml.write_text(
+            "task: livecodebench_local\n"
+            "dataset_path: json\n"
+            "dataset_kwargs:\n"
+            "  data_files:\n"
+            "    test: /old/packaging-machine/lcb.jsonl\n",
+            encoding="utf-8",
+        )
+        self.marker.write_text("offline bundle\n", encoding="utf-8")
+
+        with mock.patch.object(
+            self.offline, "_installed_livecodebench_yaml", return_value=task_yaml
+        ):
+            self.assertIsNone(self.offline.ensure_livecodebench_local_data())
+        self.assertIn(
+            "/old/packaging-machine/lcb.jsonl",
+            task_yaml.read_text(encoding="utf-8"),
+        )
+
+
 class LemonadeBenchTests(unittest.TestCase):
     @staticmethod
     def result_payload(measurement_runs=3):
@@ -5023,7 +5149,7 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('"Runtime"', script)
         self.assertIn("function completedJobRuntime", script)
         self.assertIn("function formatRuntimeSeconds", script)
-        self.assertIn("Runtime ${runtime}", script)
+        self.assertIn('tf("Runtime {0}", runtime)', script)
         self.assertIn(".profile-picker", styles)
         self.assertIn(".runtime-cell", styles)
         self.assertIn(".badge.profile", styles)
@@ -5156,7 +5282,7 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('id="clearSelectedJobs"', index)
         self.assertIn('id="selectAllJobs"', index)
         self.assertIn("Select all", index)
-        self.assertIn("jobs</label", index)
+        self.assertIn("Select all visible jobs</span", index)
         self.assertIn('id="selectedJobCount"', index)
         self.assertIn('id="maxConcurrentJobs"', index)
         self.assertIn('id="llamacppBackend"', index)
@@ -5165,7 +5291,7 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('value="vulkan"', index)
         self.assertIn('value="rocm"', index)
         self.assertIn('id="hideGatedTasks"', index)
-        self.assertIn("gated</label", index)
+        self.assertIn("gated</span></label", index)
         self.assertIn('id="taskViewMode"', index)
         self.assertIn('value="leaves" selected', index)
         self.assertIn('value="groups"', index)
@@ -5181,7 +5307,7 @@ class SmokeTests(unittest.TestCase):
         self.assertNotIn('id="leafTasksOnly"', index)
         self.assertNotIn("leafTasksOnly", script)
         self.assertIn('id="hideNonEnglishTasks"', index)
-        self.assertIn("non-English</label", index)
+        self.assertIn("non-English</span></label", index)
         self.assertIn("hideNonEnglishTasks", script)
         self.assertIn('task.language_scope === "non_english"', script)
         self.assertIn("taskViewMode", script)
@@ -5243,7 +5369,7 @@ class SmokeTests(unittest.TestCase):
         self.assertIn("includeActive: true", script)
         self.assertIn("Live job activity", script)
         self.assertIn("summaryActions.append(progress)", script)
-        self.assertIn('button("Rerun", "job-rerun")', script)
+        self.assertIn('button(t("Rerun"), "job-rerun")', script)
         self.assertIn("function rerunJobs", script)
         self.assertIn("displayJudgeModel(row.entry.judge_model)", script)
         self.assertIn('replace(/^lemonade\\//, "")', script)
@@ -5293,7 +5419,7 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('task.compatibility === "gated"', script)
         self.assertIn("hideGatedTasks", script)
         self.assertIn("Jobs", index)
-        self.assertIn("<summary>Jobs", index)
+        self.assertIn('<summary data-i18n="Jobs">Jobs', index)
         self.assertIn("Could not load results", script)
         self.assertIn("setTaskLoading", script)
         self.assertNotIn('id="jobLog"', index)

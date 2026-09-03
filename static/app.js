@@ -34,6 +34,7 @@ const LEADERBOARD_CATEGORIES = [
 	"Reasoning",
 	"Math",
 	"Coding / Structured Output",
+	"LiveCodeBench",
 	"Instruction Following",
 	"Other",
 ];
@@ -136,14 +137,14 @@ async function api(path, options = {}) {
 			try {
 				payload = JSON.parse(text);
 			} catch (_error) {
-				throw new Error(`Invalid response from ${path}`);
+				throw new Error(tf("Invalid response from {0}", path));
 			}
 		}
 		if (!response.ok) throw new Error(payload.error || response.statusText);
 		return payload;
 	} catch (error) {
 		if (error.name === "AbortError")
-			throw new Error(`Request timed out: ${path}`);
+			throw new Error(tf("Request timed out: {0}", path));
 		throw error;
 	} finally {
 		clearTimeout(timeout);
@@ -173,9 +174,9 @@ async function loadConfig() {
 }
 
 function profileDisplayLabel(profile) {
-	if (!profile) return "Custom";
-	if (profile.custom || !profile.version) return profile.label || "Custom";
-	return `${profile.label} v${profile.version}`;
+	if (!profile) return t("Custom");
+	if (profile.custom || !profile.version) return t(profile.label) || t("Custom");
+	return tf("{0} v{1}", t(profile.label), profile.version);
 }
 
 function benchmarkProfileForRecord(record) {
@@ -190,7 +191,7 @@ function benchmarkProfileForRecord(record) {
 	}
 	return {
 		id: "custom",
-		label: "Custom (legacy)",
+		label: t("Custom (legacy)"),
 		version: null,
 		custom: true,
 	};
@@ -253,7 +254,7 @@ function activeBenchmarkProfile() {
 function updateBenchmarkProfileIndicator() {
 	const profile = activeBenchmarkProfile();
 	const indicator = $("activeBenchmarkProfile");
-	indicator.textContent = `Profile: ${profileDisplayLabel(profile)}`;
+	indicator.textContent = tf("Profile: {0}", profileDisplayLabel(profile));
 	indicator.classList.toggle("custom", !profile);
 	for (const profileButton of $("lmEvalProfileButtons").querySelectorAll(
 		"button[data-profile-id]",
@@ -265,7 +266,7 @@ function updateBenchmarkProfileIndicator() {
 }
 
 function applyBenchmarkProfile(profile) {
-	if (profile.warning && !window.confirm(profile.warning)) return;
+	if (profile.warning && !window.confirm(t(profile.warning))) return;
 	state.selectedTasks = new Set(profile.tasks || []);
 	state.hasAutoSelectedTask = true;
 	$("taskViewMode").value = "leaves";
@@ -282,8 +283,11 @@ function applyBenchmarkProfile(profile) {
 	}
 	state.taskPage = 0;
 	renderTasks();
-	$("setupMessage").textContent =
-		`Applied ${profileDisplayLabel(profile)}: ${(profile.tasks || []).length} tasks`;
+	$("setupMessage").textContent = tf(
+		"Applied {0}: {1} tasks",
+		profileDisplayLabel(profile),
+		(profile.tasks || []).length,
+	);
 }
 
 function renderBenchmarkProfiles() {
@@ -291,12 +295,13 @@ function renderBenchmarkProfiles() {
 	container.replaceChildren();
 	state.benchmarkProfiles.forEach((profile) => {
 		const limit = profile.settings?.limit;
-		const suffix = limit ? `${limit}/task` : "all samples";
-		const profileButton = button(`${profile.label} · ${suffix}`);
+		const suffix = limit ? tf("{0}/task", limit) : t("all samples");
+		const profileButton = button(`${t(profile.label)} · ${suffix}`);
 		profileButton.dataset.profileId = profile.id;
 		profileButton.setAttribute("aria-pressed", "false");
 		profileButton.title = [profile.description, profile.warning]
 			.filter(Boolean)
+			.map((part) => t(part))
 			.join(" ");
 		profileButton.addEventListener("click", () => applyBenchmarkProfile(profile));
 		container.append(profileButton);
@@ -306,7 +311,7 @@ function renderBenchmarkProfiles() {
 
 async function loadModels() {
 	const base = encodeURIComponent($("openaiBaseUrl").value.trim());
-	setText($("modelList"), "Loading models…");
+	setText($("modelList"), t("Loading models…"));
 	try {
 		const payload = await api(`/api/models?base_url=${base}`);
 		state.models = payload.models || [];
@@ -314,7 +319,7 @@ async function loadModels() {
 		renderSweJudgeModels();
 		renderResults();
 	} catch (error) {
-		setText($("modelList"), `Could not load models: ${error.message}`);
+		setText($("modelList"), tf("Could not load models: {0}", error.message));
 	}
 }
 async function loadTasks() {
@@ -326,7 +331,11 @@ async function loadTasks() {
 	$("unselectVisibleTasks").disabled = true;
 	setText(
 		$("taskList"),
-		`Loading ${suiteLabel(requestedSuite)} ${suiteWorkItems(requestedSuite)}…`,
+		tf(
+			"Loading {0} {1}…",
+			suiteLabel(requestedSuite),
+			t(suiteWorkItems(requestedSuite)),
+		),
 	);
 	try {
 		const suite = encodeURIComponent(requestedSuite);
@@ -340,7 +349,7 @@ async function loadTasks() {
 	} catch (error) {
 		if (loadToken !== state.taskLoadToken || requestedSuite !== state.activeSuite)
 			return;
-		setText($("taskList"), `Could not load tasks: ${error.message}`);
+		setText($("taskList"), tf("Could not load tasks: {0}", error.message));
 	} finally {
 		if (
 			loadToken === state.taskLoadToken &&
@@ -391,7 +400,7 @@ async function loadLeaderboard() {
 			state.leaderboard = payload.leaderboard || [];
 			renderLeaderboard();
 		} catch (error) {
-			setText($("leaderboard"), `Could not load results: ${error.message}`);
+			setText($("leaderboard"), tf("Could not load results: {0}", error.message));
 		}
 	});
 }
@@ -402,7 +411,7 @@ async function loadResultRows(suite = state.resultSuite, force = false) {
 		return;
 	}
 	return singleFlight(`results:${suite}`, async () => {
-		setText($("chart"), `Loading ${suiteLabel(suite)} result details…`);
+		setText($("chart"), tf("Loading {0} result details…", suiteLabel(suite)));
 		let offset = 0;
 		const rows = [];
 		do {
@@ -437,7 +446,7 @@ async function loadResults({ forceRows = false } = {}) {
 		try {
 			await loadResultRows(state.resultSuite, forceRows);
 		} catch (error) {
-			setText($("chart"), `Could not load results: ${error.message}`);
+			setText($("chart"), tf("Could not load results: {0}", error.message));
 		}
 	}
 }
@@ -446,7 +455,10 @@ function renderModels() {
 	const list = $("modelList");
 	list.replaceChildren();
 	if (!state.models.length)
-		return setText(list, "No models returned by the OpenAI-compatible endpoint.");
+		return setText(
+			list,
+			t("No models returned by the OpenAI-compatible endpoint."),
+		);
 	if (!state.selectedModels.size) state.selectedModels.add(state.models[0].id);
 	const filter = $("modelFilter").value.trim().toLowerCase();
 	const matchingModels = state.models.filter((model) =>
@@ -454,8 +466,11 @@ function renderModels() {
 			.toLowerCase()
 			.includes(filter),
 	);
-	$("modelCount").textContent =
-		`Showing ${matchingModels.length.toLocaleString()} of ${state.models.length.toLocaleString()} models.`;
+	$("modelCount").textContent = tf(
+		"Showing {0} of {1} models.",
+		matchingModels.length.toLocaleString(),
+		state.models.length.toLocaleString(),
+	);
 	matchingModels.forEach((model) => {
 		const item = div("item");
 		const label = document.createElement("label");
@@ -550,9 +565,18 @@ function renderTasks() {
 	);
 	state.visibleTaskNames = renderedTasks.map((task) => task.name);
 	const workItems = suiteWorkItems(state.activeSuite);
-	$("taskCount").textContent =
-		`Showing ${renderedTasks.length.toLocaleString()} of ${matchingTasks.length.toLocaleString()} matching ${workItems} (${state.tasks.length.toLocaleString()} total).`;
-	$("taskPage").textContent = `Page ${state.taskPage + 1} of ${pageCount}`;
+	$("taskCount").textContent = tf(
+		"Showing {0} of {1} matching {2} ({3} total).",
+		renderedTasks.length.toLocaleString(),
+		matchingTasks.length.toLocaleString(),
+		t(workItems),
+		state.tasks.length.toLocaleString(),
+	);
+	$("taskPage").textContent = tf(
+		"Page {0} of {1}",
+		state.taskPage + 1,
+		pageCount,
+	);
 	$("taskPrev").disabled = state.taskPage <= 0;
 	$("taskNext").disabled = state.taskPage >= pageCount - 1;
 	$("selectVisibleTasks").disabled = renderedTasks.length === 0;
@@ -614,12 +638,17 @@ function pruneSelectedTasksForViewMode(taskViewMode) {
 function renderSelectedTasks() {
 	const list = $("selectedTasksList");
 	const selected = [...state.selectedTasks].sort((a, b) => a.localeCompare(b));
-	$("selectedTaskCount").textContent =
-		`${selected.length.toLocaleString()} selected`;
+	$("selectedTaskCount").textContent = tf(
+		"{0} selected",
+		selected.length.toLocaleString(),
+	);
 	list.replaceChildren();
 	updateBenchmarkProfileIndicator();
 	if (!selected.length)
-		return setText(list, `No ${suiteWorkItems(state.activeSuite)} selected.`);
+		return setText(
+			list,
+			tf("No {0} selected.", t(suiteWorkItems(state.activeSuite))),
+		);
 	selected.forEach((taskName) => {
 		const chip = document.createElement("button");
 		chip.className = "selected-chip";
@@ -661,19 +690,25 @@ function renderJobs() {
 		[...state.expandedJobs].filter((id) => existing.has(id)),
 	);
 	const jobs = visibleJobs();
-	const visibleLabel = `${jobs.length.toLocaleString()} ${jobs.length === 1 ? "job" : "jobs"}`;
-	const totalLabel = `${state.jobs.length.toLocaleString()} ${state.jobs.length === 1 ? "job" : "jobs"}`;
+	const visibleLabel = tf(
+		jobs.length === 1 ? "{0} job" : "{0} jobs",
+		jobs.length.toLocaleString(),
+	);
+	const totalLabel = tf(
+		state.jobs.length === 1 ? "{0} job" : "{0} jobs",
+		state.jobs.length.toLocaleString(),
+	);
 	$("visibleJobCount").textContent =
 		state.jobSuiteFilter === "all"
 			? visibleLabel
-			: `${jobs.length.toLocaleString()} of ${totalLabel}`;
+			: tf("{0} of {1}", jobs.length.toLocaleString(), totalLabel);
 	if (!state.jobs.length) {
-		setText(list, "No jobs yet.");
+		setText(list, t("No jobs yet."));
 		renderSelectedJobs();
 		return;
 	}
 	if (!jobs.length) {
-		setText(list, `No ${suiteLabel(state.jobSuiteFilter)} jobs.`);
+		setText(list, tf("No {0} jobs.", suiteLabel(state.jobSuiteFilter)));
 		renderSelectedJobs();
 		return;
 	}
@@ -711,11 +746,11 @@ function renderJobs() {
 		if (progress) summaryActions.append(progress);
 		if (ACTIVE_JOB_STATUSES.has(job.status)) {
 			const cancelButton = button(
-				job.status === "cancelling" ? "Stopping…" : "Cancel",
+				job.status === "cancelling" ? t("Stopping…") : t("Cancel"),
 				"job-cancel",
 			);
 			cancelButton.disabled = job.status === "cancelling";
-			cancelButton.title = "Stop this job and mark it cancelled";
+			cancelButton.title = t("Stop this job and mark it cancelled");
 			cancelButton.addEventListener("click", (event) => {
 				event.preventDefault();
 				event.stopPropagation();
@@ -723,11 +758,11 @@ function renderJobs() {
 			});
 			summaryActions.append(cancelButton);
 		}
-		const rerunButton = button("Rerun", "job-rerun");
+		const rerunButton = button(t("Rerun"), "job-rerun");
 		rerunButton.disabled = ACTIVE_JOB_STATUSES.has(job.status);
 		rerunButton.title = rerunButton.disabled
-			? "Cancel this job before rerunning it"
-			: "Clear this job and start it again with the same options";
+			? t("Cancel this job before rerunning it")
+			: t("Clear this job and start it again with the same options");
 		rerunButton.addEventListener("click", (event) => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -740,7 +775,13 @@ function renderJobs() {
 		summary.append(
 			summaryBlock(
 				job.model_id,
-				`Job ${job.id} · ${suiteLabel(jobSuite(job))} · ${Number(job.task_count || 0).toLocaleString()} ${suiteWorkItems(jobSuite(job))}`,
+				tf(
+					"Job {0} · {1} · {2} {3}",
+					job.id,
+					suiteLabel(jobSuite(job)),
+					Number(job.task_count || 0).toLocaleString(),
+					t(suiteWorkItems(jobSuite(job))),
+				),
 			),
 			summaryActions,
 		);
@@ -766,12 +807,12 @@ function renderJobExpanded(container, summaryJob) {
 	const job = state.jobDetails.get(summaryJob.id);
 	if (!job) {
 		const message = div("job-detail-message");
-		setText(message, "Loading job details…");
+		setText(message, t("Loading job details…"));
 		container.append(message);
 		void loadJobDetails(summaryJob.id);
 	} else if (job.detail_error) {
 		const message = div("job-detail-message");
-		setText(message, `Could not load job details: ${job.detail_error}`);
+		setText(message, tf("Could not load job details: {0}", job.detail_error));
 		container.append(message);
 	} else {
 		const taskList = document.createElement("ul");
@@ -788,13 +829,17 @@ function renderJobExpanded(container, summaryJob) {
 	}
 
 	const logLabel = div("job-log-label");
-	setText(logLabel, "Live output");
+	setText(logLabel, t("Live output"));
 	const log = document.createElement("pre");
 	log.className = "log job-log";
 	log.dataset.jobId = summaryJob.id;
-	log.setAttribute("aria-label", `Live output for job ${summaryJob.id}`);
+	log.setAttribute(
+		"aria-label",
+		tf("Live output for job {0}", summaryJob.id),
+	);
 	log.setAttribute("aria-live", "polite");
-	log.textContent = state.jobLogs.get(summaryJob.id) || "Loading log output…";
+	log.textContent =
+		state.jobLogs.get(summaryJob.id) || t("Loading log output…");
 	state.jobLogElements.set(summaryJob.id, log);
 	container.append(logLabel, log);
 	if (!state.jobLogs.has(summaryJob.id)) {
@@ -831,8 +876,12 @@ function renderSelectedJobs() {
 		ACTIVE_JOB_STATUSES.has(job.status),
 	).length;
 	$("selectedJobCount").textContent = activeCount
-		? `${count.toLocaleString()} selected · ${activeCount.toLocaleString()} active`
-		: `${count.toLocaleString()} selected`;
+		? tf(
+				"{0} selected · {1} active",
+				count.toLocaleString(),
+				activeCount.toLocaleString(),
+			)
+		: tf("{0} selected", count.toLocaleString());
 	$("cancelSelectedJobs").disabled = activeCount === 0;
 	$("clearSelectedJobs").disabled = count === 0 || activeCount > 0;
 	$("rerunSelectedJobs").disabled = count === 0 || activeCount > 0;
@@ -870,7 +919,7 @@ async function loadJobLog(jobId, { forceScroll = false } = {}) {
 			if (!state.jobs.some((candidate) => candidate.id === jobId)) return;
 			if (Array.isArray(job.command)) state.jobCommands.set(jobId, job.command);
 			const command = (state.jobCommands.get(jobId) || []).join(" ");
-			content = `$ ${command}\n\n${job.log_tail || "No log output yet."}`;
+			content = `$ ${command}\n\n${job.log_tail || t("No log output yet.")}`;
 		} catch (error) {
 			if (!state.jobs.some((candidate) => candidate.id === jobId)) return;
 			content = error.message;
@@ -931,7 +980,7 @@ function renderResultProfileFilter(entries) {
 	entries.forEach((entry) =>
 		available.set(recordProfileId(entry), recordProfileLabel(entry)),
 	);
-	select.replaceChildren(new Option("All profiles", "all"));
+	select.replaceChildren(new Option(t("All profiles"), "all"));
 	for (const [profileId, label] of available) {
 		select.append(new Option(label, profileId));
 	}
@@ -961,7 +1010,10 @@ function renderLeaderboard() {
 	if (!entries.length)
 		return setText(
 			list,
-			`No ${suiteLabel(state.resultSuite)} leaderboard results yet.`,
+			tf(
+				"No {0} leaderboard results yet.",
+				suiteLabel(state.resultSuite),
+			),
 		);
 	if (state.resultSuite === "lemonade_bench") {
 		renderLemonadeBenchLeaderboard(list, entries);
@@ -987,7 +1039,7 @@ function renderLmEvalLeaderboard(list, entries) {
 	const profileRanks = new Map();
 	const rows = orderedEntries.map((entry) => {
 		const model = modelForEntry(entry);
-		const modelName = entry.model || entry.model_id || "unknown model";
+		const modelName = entry.model || entry.model_id || t("unknown model");
 		const profile = benchmarkProfileForRecord(entry);
 		let rankNumber = null;
 		if (entry.rank_eligible) {
@@ -1106,9 +1158,15 @@ function renderLmEvalLeaderboard(list, entries) {
 				const cell = leaderboardCell(
 					formatScore(categoryScore?.score),
 					"score-cell category-score",
+					category === "LiveCodeBench"
+						? "LiveCodeBench code generation pass@1"
+						: "",
 				);
 				if (categoryScore?.tasks?.length)
-					cell.title = categoryScore.tasks.join(", ");
+					cell.title =
+						category === "LiveCodeBench"
+							? `${cell.title} (${categoryScore.tasks.join(", ")})`
+							: categoryScore.tasks.join(", ");
 				return cell;
 			},
 		});
@@ -1147,13 +1205,16 @@ function leaderboardTableHead(columns, suite) {
 		button.type = "button";
 		button.className = "leaderboard-sort";
 		button.dataset.sortKey = column.key;
-		const sortLabel = column.sortLabel || column.label;
+		const sortLabel = t(column.sortLabel || column.label);
 		const nextDirection =
 			active && currentSort.direction === "asc" ? "descending" : "ascending";
-		button.setAttribute("aria-label", `Sort by ${sortLabel}, ${nextDirection}`);
-		button.title = `Sort by ${sortLabel} (${nextDirection})`;
+		button.setAttribute(
+			"aria-label",
+			tf("Sort by {0}, {1}", sortLabel, t(nextDirection)),
+		);
+		button.title = tf("Sort by {0} ({1})", sortLabel, t(nextDirection));
 		const label = document.createElement("span");
-		label.textContent = column.label;
+		label.textContent = t(column.label);
 		const indicator = document.createElement("span");
 		indicator.className = "leaderboard-sort-indicator";
 		indicator.setAttribute("aria-hidden", "true");
@@ -1227,8 +1288,8 @@ function isMissingLeaderboardValue(value) {
 }
 
 function leaderboardStatus(entry) {
-	if (entry.partial && entry.status === "succeeded") return "incomplete";
-	return entry.status || (entry.partial ? "partial" : "—");
+	if (entry.partial && entry.status === "succeeded") return t("incomplete");
+	return t(entry.status || (entry.partial ? "partial" : "—"));
 }
 
 function formatTaskCoverage(entry) {
@@ -1243,7 +1304,7 @@ function formatTaskCoverage(entry) {
 function renderLemonadeBenchLeaderboard(list, entries) {
 	const rows = entries.map((entry, index) => ({
 		entry,
-		modelName: entry.model || entry.model_id || "unknown model",
+		modelName: entry.model || entry.model_id || t("unknown model"),
 		rankNumber: index + 1,
 	}));
 	const columns = [
@@ -1337,7 +1398,7 @@ function renderSweMiniLeaderboard(list, entries) {
 	const rows = entries.map((entry, index) => ({
 		entry,
 		model: modelForEntry(entry),
-		modelName: entry.model || entry.model_id || "unknown model",
+		modelName: entry.model || entry.model_id || t("unknown model"),
 		rankNumber: index + 1,
 	}));
 	const columns = [
@@ -1466,12 +1527,12 @@ function renderDetailFilter(kind, values, filterState) {
 	const config = DETAIL_FILTER_CONFIG[kind];
 	const label =
 		kind === "tasks" && state.resultSuite === "lemonade_bench"
-			? "Scenarios"
-			: config.label;
+			? t("Scenarios")
+			: t(config.label);
 	const allLabel =
 		kind === "tasks" && state.resultSuite === "lemonade_bench"
-			? "All scenarios"
-			: config.allLabel;
+			? t("All scenarios")
+			: t(config.allLabel);
 	const container = $(config.optionsId);
 	const summary = $(config.summaryId);
 	const selectedValues = values.filter((value) => filterState[kind].has(value));
@@ -1503,16 +1564,21 @@ function renderDetailFilter(kind, values, filterState) {
 	});
 
 	if (!values.length) {
-		summary.textContent = `${label}: None available`;
+		summary.textContent = tf("{0}: None available", label);
 		summary.title = "";
 	} else if (allSelected) {
-		summary.textContent = `${label}: All (${values.length})`;
+		summary.textContent = tf("{0}: All ({1})", label, values.length);
 		summary.title = selectedValues.join(", ");
 	} else if (selectedValues.length === 1) {
-		summary.textContent = `${label}: ${selectedValues[0]}`;
+		summary.textContent = tf("{0}: {1}", label, selectedValues[0]);
 		summary.title = selectedValues[0];
 	} else {
-		summary.textContent = `${label}: ${selectedValues.length} of ${values.length}`;
+		summary.textContent = tf(
+			"{0}: {1} of {2}",
+			label,
+			selectedValues.length,
+			values.length,
+		);
 		summary.title = selectedValues.join(", ");
 	}
 }
@@ -1596,7 +1662,10 @@ function renderChart(rows, metrics) {
 		rows.some((row) => row.metric === metric),
 	);
 	if (!metricsWithRows.length)
-		return setText(chart, "No numeric results match the selected filters.");
+		return setText(
+			chart,
+			t("No numeric results match the selected filters."),
+		);
 	metricsWithRows.forEach((metric) => {
 		appendMetricChart(
 			chart,
@@ -1623,7 +1692,7 @@ function appendMetricChart(chart, rows, metric) {
 	const svg = document.createElementNS(SVG_NS, "svg");
 	svg.setAttribute("viewBox", `0 0 ${visibleWidth} ${height}`);
 	svg.setAttribute("role", "img");
-	svg.setAttribute("aria-label", `${metric} chart`);
+	svg.setAttribute("aria-label", tf("{0} chart", metric));
 	canvas.append(svg);
 	group.append(heading, canvas);
 	chart.append(group);
@@ -1697,7 +1766,7 @@ function renderTable(rows) {
 	const header = document.createElement("tr");
 	headers.forEach((name) => {
 		const th = document.createElement("th");
-		th.textContent = name;
+		th.textContent = t(name);
 		header.append(th);
 	});
 	thead.append(header);
@@ -1708,7 +1777,7 @@ function renderTable(rows) {
 			? [
 					row.model,
 					row.task,
-					row.scenario_category || "",
+					t(row.scenario_category || ""),
 					resultConfigurationLabel(row),
 					row.metric,
 					formatValue(row.value),
@@ -1745,15 +1814,17 @@ async function cancelSelectedJobs() {
 
 async function cancelJobs(jobIds) {
 	if (!jobIds.length) return;
-	$("setupMessage").textContent = "Stopping selected job(s)…";
+	$("setupMessage").textContent = t("Stopping selected job(s)…");
 	try {
 		const payload = await api("/api/jobs/cancel", {
 			method: "POST",
 			body: JSON.stringify({ job_ids: jobIds }),
 		});
 		state.jobs = payload.jobs || [];
-		$("setupMessage").textContent =
-			`Cancellation requested for ${payload.cancelled} job(s).`;
+		$("setupMessage").textContent = tf(
+			"Cancellation requested for {0} job(s).",
+			payload.cancelled,
+		);
 		renderJobs();
 		await loadExpandedJobLogs({ includeAll: true });
 	} catch (error) {
@@ -1775,7 +1846,10 @@ async function clearSelectedJobs() {
 		state.jobCommands.clear();
 		state.jobLogs.clear();
 		state.jobLogElements.clear();
-		$("setupMessage").textContent = `Cleared ${payload.cleared} selected job(s).`;
+		$("setupMessage").textContent = tf(
+			"Cleared {0} selected job(s).",
+			payload.cleared,
+		);
 		renderJobs();
 		invalidateResultRows();
 		await loadResults({ forceRows: true });
@@ -1792,7 +1866,10 @@ async function clearFailedJobs() {
 		state.jobCommands.clear();
 		state.jobLogs.clear();
 		state.jobLogElements.clear();
-		$("setupMessage").textContent = `Cleared ${payload.cleared} failed job(s).`;
+		$("setupMessage").textContent = tf(
+			"Cleared {0} failed job(s).",
+			payload.cleared,
+		);
 		renderJobs();
 		invalidateResultRows();
 		await loadResults({ forceRows: true });
@@ -1808,7 +1885,7 @@ async function rerunSelectedJobs() {
 
 async function rerunJobs(jobIds) {
 	if (!jobIds.length) return;
-	$("setupMessage").textContent = "Rerunning job…";
+	$("setupMessage").textContent = t("Rerunning job…");
 	try {
 		const payload = await api("/api/jobs/rerun", {
 			method: "POST",
@@ -1824,7 +1901,10 @@ async function rerunJobs(jobIds) {
 		}
 		jobIds.forEach((jobId) => state.selectedJobs.delete(jobId));
 		if (created.length) state.expandedJobs.add(created.at(-1).id);
-		$("setupMessage").textContent = `Started ${created.length} rerun job(s).`;
+		$("setupMessage").textContent = tf(
+			"Started {0} rerun job(s).",
+			created.length,
+		);
 		await loadJobs({ refreshResultsOnTransition: false });
 		invalidateResultRows();
 		await loadResults({ forceRows: true });
@@ -1838,8 +1918,11 @@ async function startJobs() {
 	const modelIds = [...state.selectedModels],
 		tasks = [...state.selectedTasks];
 	if (!modelIds.length || !tasks.length)
-		return ($("setupMessage").textContent =
-			`Select at least one model and one ${suiteLabel(suite)} ${suiteWorkItem(suite)}.`);
+		return ($("setupMessage").textContent = tf(
+			"Select at least one model and one {0} {1}.",
+			suiteLabel(suite),
+			t(suiteWorkItem(suite)),
+		));
 	const body = {
 		suite,
 		model_ids: modelIds,
@@ -1894,8 +1977,9 @@ async function startJobs() {
 		const maxOutputTokens =
 			numberOrNull($("sweMaxOutputTokens").value) || DEFAULT_SWE_MAX_OUTPUT_TOKENS;
 		if (maxOutputTokens > contextWindow) {
-			$("setupMessage").textContent =
-				"Maximum output tokens cannot exceed the context window.";
+			$("setupMessage").textContent = t(
+				"Maximum output tokens cannot exceed the context window.",
+			);
 			return;
 		}
 		Object.assign(body, {
@@ -1924,13 +2008,16 @@ async function startJobs() {
 			log_samples: $("logSamples").checked,
 		});
 	}
-	$("setupMessage").textContent = "Starting…";
+	$("setupMessage").textContent = t("Starting…");
 	try {
 		const payload = await api("/api/jobs", {
 			method: "POST",
 			body: JSON.stringify(body),
 		});
-		$("setupMessage").textContent = `Started ${payload.jobs.length} job(s).`;
+		$("setupMessage").textContent = tf(
+			"Started {0} job(s).",
+			payload.jobs.length,
+		);
 		state.resultSuite = suite;
 		updateSuiteUi();
 		await loadJobs();
@@ -1943,7 +2030,7 @@ async function startJobs() {
 function statusBadge(job) {
 	const status = document.createElement("span");
 	status.className = `status ${job.status}`;
-	status.textContent = job.status;
+	status.textContent = t(job.status);
 	return status;
 }
 function progressBadge(job) {
@@ -1953,7 +2040,7 @@ function progressBadge(job) {
 	badge.className = `badge progress${ACTIVE_JOB_STATUSES.has(job.status) ? " live" : ""}`;
 	badge.textContent = text;
 	if (ACTIVE_JOB_STATUSES.has(job.status)) {
-		badge.title = "Live job activity; refreshed every five seconds";
+		badge.title = t("Live job activity; refreshed every five seconds");
 	}
 	return badge;
 }
@@ -1996,15 +2083,15 @@ function durationText(value) {
 	const parsed = Number(value);
 	if (!Number.isFinite(parsed) || parsed < 0) return "";
 	const seconds = Math.floor(parsed);
-	if (seconds < 60) return `${seconds}s`;
+	if (seconds < 60) return tf("{0}s", seconds);
 	const minutes = Math.floor(seconds / 60);
-	if (minutes < 60) return `${minutes}m`;
+	if (minutes < 60) return tf("{0}m", minutes);
 	const hours = Math.floor(minutes / 60);
 	const remainingMinutes = minutes % 60;
-	if (hours < 24) return `${hours}h ${remainingMinutes}m`;
+	if (hours < 24) return tf("{0}h {1}m", hours, remainingMinutes);
 	const days = Math.floor(hours / 24);
 	const remainingHours = hours % 24;
-	return `${days}d ${remainingHours}h`;
+	return tf("{0}d {1}h", days, remainingHours);
 }
 
 function activeJobElapsed(job) {
@@ -2036,11 +2123,11 @@ function withElapsed(text, elapsed) {
 
 function progressText(job) {
 	const runtime = completedJobRuntime(job);
-	if (runtime) return `Runtime ${runtime}`;
+	if (runtime) return tf("Runtime {0}", runtime);
 	const elapsed = activeJobElapsed(job);
 	const requestProgress = job.request_progress || requestProgressFromLog(job);
 	const requestValue = progressValue(requestProgress);
-	if (requestValue) return withElapsed(`${requestValue} requests`, elapsed);
+	if (requestValue) return withElapsed(tf("{0} requests", requestValue), elapsed);
 
 	const progress = job.progress;
 	const value = progressValue(progress);
@@ -2048,13 +2135,19 @@ function progressText(job) {
 		const current = Number(progress.current || 0);
 		const completed = Number(progress.completed || 0);
 		if (progress.unit === "batches" && current > completed) {
-			return withElapsed(`Batch ${current}/${Number(progress.total)}`, elapsed);
+			return withElapsed(
+				tf("Batch {0}/{1}", current, Number(progress.total)),
+				elapsed,
+			);
 		}
-		return withElapsed(`${value} ${progress.unit || "items"}`, elapsed);
+		return withElapsed(
+			tf("{0} {1}", value, t(progress.unit || "items")),
+			elapsed,
+		);
 	}
-	if (job.status === "running") return withElapsed("Running", elapsed);
-	if (job.status === "queued") return withElapsed("Waiting", elapsed);
-	if (job.status === "cancelling") return withElapsed("Stopping", elapsed);
+	if (job.status === "running") return withElapsed(t("Running"), elapsed);
+	if (job.status === "queued") return withElapsed(t("Waiting"), elapsed);
+	if (job.status === "cancelling") return withElapsed(t("Stopping"), elapsed);
 	return "";
 }
 function benchmarkProfileBadge(job) {
@@ -2088,67 +2181,92 @@ function jobDetailMeta(job) {
 		currentTasks.length === 1 ? "Current task" : "Current tasks";
 	const protection = job.model_protection || {};
 	const values = [
-		`Suite: ${suiteLabel(jobSuite(job))}`,
-		jobSuite(job) === "lm_eval" ? `Profile: ${recordProfileLabel(job)}` : null,
+		tf("Suite: {0}", suiteLabel(jobSuite(job))),
+		jobSuite(job) === "lm_eval"
+			? tf("Profile: {0}", recordProfileLabel(job))
+			: null,
 		ACTIVE_JOB_STATUSES.has(job.status) &&
 		progress.unit !== "batches" &&
 		progressText(job)
-			? `Progress: ${progressText(job)}`
+			? tf("Progress: {0}", progressText(job))
 			: null,
 		batchProgress.current
-			? `Current task batch: ${batchProgress.current}/${batchProgress.total}`
+			? tf(
+					"Current task batch: {0}/{1}",
+					batchProgress.current,
+					batchProgress.total,
+				)
 			: null,
 		currentTasks.length
-			? `${currentTaskLabel}: ${currentTasks.join(", ")}`
+			? tf("{0}: {1}", t(currentTaskLabel), currentTasks.join(", "))
 			: null,
 		progressValue(requestProgress)
-			? `Current batch requests: ${progressValue(requestProgress)}`
+			? tf("Current batch requests: {0}", progressValue(requestProgress))
 			: null,
-		activeJobElapsed(job) ? `Elapsed: ${activeJobElapsed(job)}` : null,
-		completedJobRuntime(job) ? `Runtime: ${completedJobRuntime(job)}` : null,
-		job.rerun_of ? `Rerun of: ${job.rerun_of}` : null,
+		activeJobElapsed(job) ? tf("Elapsed: {0}", activeJobElapsed(job)) : null,
+		completedJobRuntime(job)
+			? tf("Runtime: {0}", completedJobRuntime(job))
+			: null,
+		job.rerun_of ? tf("Rerun of: {0}", job.rerun_of) : null,
 		evalOptions.task_batch_size
-			? `Task batch size: ${evalOptions.task_batch_size}`
+			? tf("Task batch size: {0}", evalOptions.task_batch_size)
 			: null,
 		batchProgress.total
-			? `Completed task batches: ${batchProgress.completed || 0}/${batchProgress.total}`
+			? tf(
+					"Completed task batches: {0}/{1}",
+					batchProgress.completed || 0,
+					batchProgress.total,
+				)
 			: null,
-		protection.state ? `Model protection: ${protection.state}` : null,
+		protection.state
+			? tf("Model protection: {0}", t(protection.state))
+			: null,
 		options.judge_model
-			? `Judge: ${displayJudgeModel(options.judge_model)}`
+			? tf("Judge: {0}", displayJudgeModel(options.judge_model))
 			: null,
-		options.pass_count ? `Pass attempts: ${options.pass_count}` : null,
+		options.pass_count ? tf("Pass attempts: {0}", options.pass_count) : null,
 		options.context_window
-			? `Agent context: ${formatContext(options.context_window)}`
+			? tf("Agent context: {0}", formatContext(options.context_window))
 			: null,
 		options.max_output_tokens
-			? `Max output: ${formatContext(options.max_output_tokens)}`
+			? tf("Max output: {0}", formatContext(options.max_output_tokens))
 			: null,
 		options.provider_timeout_minutes
-			? `Provider timeout: ${options.provider_timeout_minutes}m`
+			? tf("Provider timeout: {0}m", options.provider_timeout_minutes)
 			: null,
 		options.provider_max_retries === undefined
 			? null
-			: `Provider retries: ${options.provider_max_retries}`,
+			: tf("Provider retries: {0}", options.provider_max_retries),
 		options.recipe_policy === "lemonade_unchanged"
-			? "Recipe policy: Lemonade unchanged"
+			? t("Recipe policy: Lemonade unchanged")
 			: null,
 		jobSuite(job) === "lemonade_bench"
-			? `Runs: ${benchOptions.measurement_runs || DEFAULT_LEMONADE_BENCH_RUNS}`
+			? tf(
+					"Runs: {0}",
+					benchOptions.measurement_runs || DEFAULT_LEMONADE_BENCH_RUNS,
+				)
 			: null,
 		jobSuite(job) === "lemonade_bench"
-			? `Warmups: ${benchOptions.warmup_runs || 0}`
+			? tf("Warmups: {0}", benchOptions.warmup_runs || 0)
 			: null,
 		jobSuite(job) === "lemonade_bench" && benchOptions.backends?.length
-			? `Backends: ${benchOptions.backends.join(", ")}`
+			? tf("Backends: {0}", benchOptions.backends.join(", "))
 			: null,
 		jobSuite(job) === "lemonade_bench" && benchOptions.backend_source
-			? `Backend source: ${benchOptions.backend_source.replaceAll("_", " ")}`
+			? tf(
+					"Backend source: {0}",
+					benchOptions.backend_source.replaceAll("_", " "),
+				)
 			: null,
 		jobSuite(job) === "lemonade_bench" && benchOptions.context_sizes?.length
-			? `Contexts: ${benchOptions.context_sizes.map(formatContext).join(", ")}`
+			? tf(
+					"Contexts: {0}",
+					benchOptions.context_sizes.map(formatContext).join(", "),
+				)
 			: null,
-		job.provider_backend ? `Runtime backend: ${job.provider_backend}` : null,
+		job.provider_backend
+			? tf("Runtime backend: {0}", job.provider_backend)
+			: null,
 	].filter(Boolean);
 	details.textContent = values.join(" · ");
 	return details;
@@ -2179,7 +2297,12 @@ function resultConfigurationLabel(record) {
 	if (recordSuite(record) === "lemonade_bench") {
 		return (
 			record.configuration ||
-			`${[record.recipe, record.backend].filter(Boolean).join("/") || "default"} · ${formatContext(record.context_window)}`
+			tf(
+				"{0} · {1}",
+				[record.recipe, record.backend].filter(Boolean).join("/") ||
+					t("default"),
+				formatContext(record.context_window),
+			)
 		);
 	}
 	return recordProfileLabel(record);
@@ -2213,14 +2336,20 @@ function badgeRow(labels) {
 function modelMeta(model) {
 	return [
 		model.recipe,
-		model.size_gb ? `${model.size_gb} GB` : null,
-		model.context_window ? `${model.context_window.toLocaleString()} ctx` : null,
+		model.size_gb ? tf("{0} GB", model.size_gb) : null,
+		model.context_window
+			? tf("{0} ctx", model.context_window.toLocaleString())
+			: null,
 	]
 		.filter(Boolean)
 		.join(" · ");
 }
 function taskMeta(task) {
-	return task.description || "";
+	const description = task.description || "";
+	const composed = description.match(/^(.*) · up to ([\d,]+) output tokens$/);
+	if (composed)
+		return `${t(composed[1])} · ${tf("up to {0} output tokens", composed[2])}`;
+	return t(description);
 }
 function badgeRowNode(nodes) {
 	const row = document.createElement("div");
@@ -2230,19 +2359,19 @@ function badgeRowNode(nodes) {
 function compatibilityBadge(compatibility = "unknown") {
 	const badge = document.createElement("span");
 	badge.className = `badge compatibility ${compatibility}`;
-	badge.textContent = compatibility;
+	badge.textContent = t(compatibility);
 	return badge;
 }
 function categoryBadge(category = "Other") {
 	const badge = document.createElement("span");
 	badge.className = "badge category";
-	badge.textContent = category || "Other";
+	badge.textContent = t(category || "Other");
 	return badge;
 }
 function kindBadge(kind = "task") {
 	const badge = document.createElement("span");
 	badge.className = "badge kind";
-	badge.textContent = kind || "task";
+	badge.textContent = t(kind || "task");
 	return badge;
 }
 function isClientBackend(backend) {
@@ -2270,7 +2399,7 @@ function modelBackendLabel(entry, model) {
 		recipeBackend(entry.recipe) ||
 		recipeBackend(model?.recipe) ||
 		specificRuntimeBackend(entry.backend) ||
-		"unknown"
+		t("unknown")
 	);
 }
 function modelForEntry(entry) {
@@ -2293,7 +2422,7 @@ function leaderboardCell(value, className = "", title = "") {
 	const cell = document.createElement("td");
 	if (className) cell.className = className;
 	cell.textContent = value ?? "—";
-	if (title) cell.title = title;
+	if (title) cell.title = t(title);
 	return cell;
 }
 function div(className) {
@@ -2322,7 +2451,7 @@ function svgRect(x, y, width, height) {
 	rect.setAttribute("width", width);
 	rect.setAttribute("height", height);
 	rect.setAttribute("rx", "6");
-	rect.setAttribute("fill", "#58a6ff");
+	rect.setAttribute("fill", "#1a73e8");
 	return rect;
 }
 function svgText(x, y, value, className) {
@@ -2396,12 +2525,22 @@ function formatRate(value) {
 function formatGigabytes(value) {
 	return value === null || value === undefined || Number.isNaN(Number(value))
 		? "—"
-		: `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`;
+		: tf(
+				"{0} GB",
+				Number(value).toLocaleString(undefined, {
+					maximumFractionDigits: 1,
+				}),
+			);
 }
 function formatSeconds(value) {
 	return value === null || value === undefined || Number.isNaN(Number(value))
 		? "—"
-		: `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}s`;
+		: tf(
+				"{0}s",
+				Number(value).toLocaleString(undefined, {
+					maximumFractionDigits: 2,
+				}),
+			);
 }
 function formatDurationMs(value) {
 	return value === null || value === undefined || Number.isNaN(Number(value))
@@ -2411,7 +2550,7 @@ function formatDurationMs(value) {
 function formatContext(value) {
 	return value === null || value === undefined || Number.isNaN(Number(value))
 		? "—"
-		: `${Number(value).toLocaleString()} ctx`;
+		: tf("{0} ctx", Number(value).toLocaleString());
 }
 function resetTaskPage() {
 	state.taskPage = 0;
@@ -2453,15 +2592,24 @@ function updateSuiteUi() {
 		leaderboardDescription =
 			"SWE Mini ranks models by judged task success and shows runtime and average task duration. Select any column heading to sort; select it again to reverse the order.";
 	}
-	$("taskPanelTitle").textContent =
-		`${suiteLabel(state.activeSuite)} ${suiteWorkItems(state.activeSuite)}`;
-	$("selectedWorkItemsTitle").textContent =
-		`Selected ${suiteWorkItems(state.activeSuite)}`;
-	$("selectVisibleTasks").textContent =
-		`Select visible ${suiteWorkItems(state.activeSuite)}`;
-	$("unselectVisibleTasks").textContent =
-		`Unselect visible ${suiteWorkItems(state.activeSuite)}`;
-	$("taskFilter").placeholder = taskPlaceholder;
+	$("taskPanelTitle").textContent = tf(
+		"{0} {1}",
+		suiteLabel(state.activeSuite),
+		t(suiteWorkItems(state.activeSuite)),
+	);
+	$("selectedWorkItemsTitle").textContent = tf(
+		"Selected {0}",
+		t(suiteWorkItems(state.activeSuite)),
+	);
+	$("selectVisibleTasks").textContent = tf(
+		"Select visible {0}",
+		t(suiteWorkItems(state.activeSuite)),
+	);
+	$("unselectVisibleTasks").textContent = tf(
+		"Unselect visible {0}",
+		t(suiteWorkItems(state.activeSuite)),
+	);
+	$("taskFilter").placeholder = t(taskPlaceholder);
 	$("taskViewModeControl").hidden = !isLmEval;
 	$("lmEvalProfilePicker").hidden = !isLmEval;
 	$("lmEvalCategoryFilters").hidden = !isLmEval;
@@ -2472,12 +2620,16 @@ function updateSuiteUi() {
 	$("sweMiniBenchmarkOptions").hidden = !isSweMini;
 	$("sweMiniJudgeHint").hidden = !isSweMini;
 	$("resultProfileControl").hidden = state.resultSuite !== "lm_eval";
-	$("taskHint").textContent = taskHint;
-	$("leaderboardDescription").textContent = leaderboardDescription;
-	$("resultDetailsSummary").textContent =
-		`${suiteLabel(state.resultSuite)} detailed metric comparison`;
-	$("detailResultsTitle").textContent =
-		`${suiteLabel(state.resultSuite)} detailed results`;
+	$("taskHint").textContent = t(taskHint);
+	$("leaderboardDescription").textContent = t(leaderboardDescription);
+	$("resultDetailsSummary").textContent = tf(
+		"{0} detailed metric comparison",
+		suiteLabel(state.resultSuite),
+	);
+	$("detailResultsTitle").textContent = tf(
+		"{0} detailed results",
+		suiteLabel(state.resultSuite),
+	);
 	for (const button of [
 		$("suiteLemonadeBench"),
 		$("suiteLmEval"),
@@ -2513,7 +2665,7 @@ async function selectResultSuite(suite) {
 		try {
 			await loadResultRows(suite);
 		} catch (error) {
-			setText($("chart"), `Could not load results: ${error.message}`);
+			setText($("chart"), tf("Could not load results: {0}", error.message));
 		}
 	}
 }
@@ -2543,7 +2695,7 @@ $("refreshAll").addEventListener("click", () =>
 $("resultDetails").addEventListener("toggle", () => {
 	if (!$("resultDetails").open) return;
 	void loadResultRows(state.resultSuite).catch((error) =>
-		setText($("chart"), `Could not load results: ${error.message}`),
+		setText($("chart"), tf("Could not load results: {0}", error.message)),
 	);
 });
 $("startJobs").addEventListener("click", startJobs);

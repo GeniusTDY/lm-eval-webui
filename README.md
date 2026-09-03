@@ -267,6 +267,64 @@ and record that state in the job log. Alternatively, increase
 `max_loaded_models` only when the host has enough memory for every concurrently
 used model.
 
+## Offline bundle (fully disconnected deployment)
+
+The WebUI can run evaluation end-to-end with no internet access. All network
+dependencies (HuggingFace datasets, the local LiveCodeBench data, the NLTK
+resources IFEval needs for scoring, and — optionally — the SWE Mini container
+images) are bundled inside the project tree under `offline/`, so copying the
+project directory is enough to deploy.
+
+On a machine **with** internet access, run:
+
+```bash
+python3 scripts/prepare_offline.py prepare            # datasets + LiveCodeBench
+python3 scripts/prepare_offline.py prepare --with-docker   # also bundle SWE Mini images
+python3 scripts/prepare_offline.py status             # inspect what was bundled
+```
+
+`prepare` instantiates every bundled task through the real lm-eval task
+manager, which downloads the exact dataset revisions the evaluator would use
+into `offline/hf-home/`, copies `offline/livecodebench/lcb.jsonl`, and (with
+`--with-docker`) pulls, warms, and exports the SWE-bench per-task container
+images plus the shared bun cache volume into `offline/docker/`. Use
+`--tasks a,b` to bundle a custom task list, `--docker-limit N` to bundle only
+the first N SWE tasks on a trial run, and `HF_ENDPOINT=...` for a registry
+mirror. A failed task is recorded in `offline/MANIFEST.json` instead of
+aborting the whole bundle (`--strict` flips that).
+
+Then copy the entire project directory to the offline machine and run:
+
+```bash
+python3 scripts/prepare_offline.py activate   # imports Docker images/volume if bundled
+python3 -m lm_eval_webui.server              # start the WebUI normally
+```
+
+Runtime behavior when `offline/READY` exists:
+
+- Every lm-eval and SWE Mini subprocess is launched with
+  `HF_HOME=<project>/offline/hf-home`,
+  `HF_HUB_OFFLINE=HF_DATASETS_OFFLINE=TRANSFORMERS_OFFLINE=1`, so all dataset
+  reads come from the bundled cache and nothing retries the network.
+- `NLTK_DATA` points at `offline/nltk_data/` (containing the `punkt_tab`
+  tokenizer) so IFEval scoring never tries to download NLTK resources.
+- `livecodebench_local` is automatically repointed at
+  `offline/livecodebench/lcb.jsonl` (the task YAML carries the packaging
+  machine's absolute path, which is rewritten on first use).
+- SWE Mini sets `SWE_MINI_KEEP_TASK_IMAGES=1` so task images are never pruned
+  (they cannot be re-pulled offline), tolerates a failed `unzip`/`bun install`
+  check when node_modules is already populated, and still talks to the
+  LAN-internal model endpoint as usual.
+
+Delete `offline/READY` to return to normal online behavior at any time.
+
+Prerequisite: the offline machine still needs the WebUI's Python (stdlib only)
+plus the evaluation Python with `lm-eval` installed. Some bundled tasks need
+extra packages in the evaluation Python — `langdetect` and `immutabledict`
+(IFEval), `sympy`, `math_verify` and `antlr4-python3-runtime==4.11.*`
+(minerva_math500), and `jsonschema` (jsonschema_bench) — install them before
+packaging so the warmup covers every task.
+
 ## Notes
 
 - This software was created with the help of AI coding assistants.

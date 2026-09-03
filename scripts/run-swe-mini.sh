@@ -926,8 +926,18 @@ PY
           echo '[SETUP] bun installed.'
         fi
         export PATH=/root/.bun/bin:\$PATH
-        which unzip >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq unzip >/dev/null 2>&1; }
-        cd /pi-bench && bun install --frozen-lockfile 2>/dev/null || bun install 2>/dev/null
+        # unzip only assists the bun installer (which is cached in the volume);
+        # pi-bench itself never shells out to unzip, so a failure here (e.g. in
+        # an offline environment) must not abort the container.
+        which unzip >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq unzip >/dev/null 2>&1; } || true
+        # With node_modules already populated (warmed by prepare_offline),
+        # a failed install check must not abort offline runs; without it,
+        # fall back to a plain install as before.
+        if [ -d /pi-bench/node_modules ]; then
+          cd /pi-bench && bun install --frozen-lockfile >/dev/null 2>&1 || true
+        else
+          cd /pi-bench && bun install --frozen-lockfile 2>/dev/null || bun install 2>/dev/null
+        fi
         source /opt/miniconda3/etc/profile.d/conda.sh
         conda activate testbed
         bun run src/index.ts '$REL_TASK_FILE' ${EXTRA_ARGS[*]@Q}

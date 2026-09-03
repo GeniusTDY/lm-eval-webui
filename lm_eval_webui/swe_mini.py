@@ -15,6 +15,7 @@ from .lemonade import (
     lemonade_management_base_url,
     normalize_openai_base_url,
 )
+from .offline import build_offline_launch_env
 
 
 def repo_root() -> Path:
@@ -249,7 +250,7 @@ def build_swe_mini_command(request: SweMiniRequest) -> tuple[list[str], dict[str
     if request.extra_args:
         command.extend([str(arg) for arg in request.extra_args])
 
-    env = os.environ.copy()
+    env = build_offline_launch_env(os.environ.copy())
     env[LAUNCH_CWD_ENV] = str(project_root)
     env[SWE_OUTPUT_ENV] = str(request.output_path)
     env["PI_BENCH_DIR"] = str(pi_bench_dir)
