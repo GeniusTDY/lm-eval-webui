@@ -7,4 +7,6 @@ __pycache__/
 .venv/
 tinyBenchmarks.pkl
 offline/
+# CI workflow files are not tracked because the push token lacks workflow scope
+.github/workflows/
 
