@@ -4,6 +4,10 @@ A small stdlib Python WebUI for running Lemonade Bench and lm-evaluation-harness
 against installed models. Each suite has its own leaderboard and detailed
 result view.
 
+> **详细文档**：部署方案见
+> [`docs/deployment.md`](docs/deployment.md)（含全离线开箱即用部署），使用教程见
+> [`docs/tutorial.md`](docs/tutorial.md)。
+
 ## Run
 
 ```bash
