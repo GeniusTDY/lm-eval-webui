@@ -11,6 +11,6 @@ offline/pip/
 # Test scripts and test artifacts are not tracked/pushed.
 tests/
 pytest.ini
-# CI workflow files are not tracked because the push token lacks workflow scope
-.github/workflows/
+# CI workflow files are tracked now (token has workflow scope).
+# .github/workflows/
 
