@@ -1,8 +1,10 @@
 # 使用教程（Usage Tutorial）
 
-本教程介绍如何用 WebUI 对已安装模型运行 **Lemonade Bench** 与 **lm-eval** 测评，并查看排行榜与明细结果。
+本教程介绍如何用 WebUI 对已安装模型运行 **Lemonade Bench** 与 **lm-eval** 测评，并查看排行榜与明细结果。支持 **Linux 与 Windows**，二者仅启动命令的 venv 路径不同，其余操作一致。
 
 ## 1. 启动与访问
+
+### Linux／macOS
 
 ```bash
 cd lm-eval-webui
@@ -12,8 +14,24 @@ cd lm-eval-webui
   --openai-base-url http://localhost:11434/v1
 ```
 
+### Windows（PowerShell）
+
+```powershell
+cd lm-eval-webui
+.\.venv\Scripts\python.exe -m lm_eval_webui --host 0.0.0.0 --port 8080 --openai-base-url http://localhost:11434/v1
+```
+
+### Windows（CMD）
+
+```bat
+cd lm-eval-webui
+.venv\Scripts\python -m lm_eval_webui --host 0.0.0.0 --port 8080 --openai-base-url http://localhost:11434/v1
+```
+
 浏览器打开 <http://127.0.0.1:8080>（远程机器用 `http://<机器IP>:8080`）。
 
+> 上面用的是 `deploy.sh`/`deploy.ps1` 一键部署生成的 `.venv`（局域网 pip 源方案）。若按 Linux `deploy.sh` 安装，venv 在 `.venv/bin/`；按 Windows `deploy.ps1` 安装，venv 在 `.venv\Scripts\`。
+>
 > 模型后端需独立运行且已就绪（llama.cpp、Ollama、vLLM 等任意 OpenAI 兼容服务）。WebUI 不会替你启动模型。
 
 ## 2. 首页布局

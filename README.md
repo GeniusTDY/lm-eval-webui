@@ -5,8 +5,9 @@ against installed models. Each suite has its own leaderboard and detailed
 result view.
 
 > **详细文档**：部署方案见
-> [`docs/deployment.md`](docs/deployment.md)（含全离线开箱即用部署），使用教程见
-> [`docs/tutorial.md`](docs/tutorial.md)。
+> [`docs/deployment.md`](docs/deployment.md)（含局域网 pip 源一键部署与全离线开箱即用部署，Windows/Linux），使用教程见
+> [`docs/tutorial.md`](docs/tutorial.md)。一键部署脚本：
+> [`scripts/deploy.sh`](scripts/deploy.sh)（Linux）、[`scripts/deploy.ps1`](scripts/deploy.ps1)（Windows）。
 
 ## Run
 
