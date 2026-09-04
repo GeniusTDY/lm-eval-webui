@@ -1,14 +1,13 @@
 # Lemonade Benchmark WebUI
 
-A small stdlib Python WebUI for running Lemonade Bench, lm-evaluation-harness,
-and SWE Mini against installed models. Each suite has its own leaderboard and
-detailed result view.
+A small stdlib Python WebUI for running Lemonade Bench and lm-evaluation-harness
+against installed models. Each suite has its own leaderboard and detailed
+result view.
 
 ## Run
 
 ```bash
 cd lm-eval-webui
-git submodule update --init --recursive
 python -m lm_eval_webui
 ```
 
@@ -54,40 +53,9 @@ container image includes the checksum-pinned Lemonade 11.6 CLI and supports both
 amd64 and arm64 builds. Source-based local runs require a compatible `lemonade`
 CLI on `PATH`; override its location with `LEMONADE_CLI=/path/to/lemonade`.
 
-## SWE Mini / pi-bench
-
-SWE Mini support uses upstream `pi-bench` as a clean git submodule at
-`third_party/pi-bench`. WebUI-specific customizations live in this repo under
-`scripts/` and `lm_eval_webui/`, so the submodule can be updated independently:
-
-```bash
-git submodule update --remote third_party/pi-bench
-```
-
-SWE Mini judging uses a Lemonade model from the configured
-OpenAI-compatible endpoint. The WebUI lets you choose the judge from the
-available model list and defaults to `gpt-oss-120b-mxfp-GGUF` when it is
-available. The runner retains at most the active and immediately preceding task
-images so Docker can reuse shared layers while the next image is pulled. It
-removes the preceding image after that task and the final image on exit or
-cancellation, preventing long runs from filling the Docker-in-Docker node
-filesystem. Set
-`SWE_MINI_KEEP_TASK_IMAGES=1` only when intentionally retaining the complete
-image cache and sufficient ephemeral storage is available.
-
-Override the submodule location with:
-
-```bash
-python -m lm_eval_webui --pi-bench-dir /path/to/pi-bench
-```
-
 ## Docker Compose
 
-The Compose setup runs the WebUI plus a Docker-in-Docker sidecar. This lets SWE
-Mini containers mount the shared workspace path inside the sidecar daemon.
-
 ```bash
-git submodule update --init --recursive
 OPENAI_BASE_URL="http://host.docker.internal:11434/v1" \
   docker compose -f deploy/docker-compose.yml up --build
 ```
@@ -96,10 +64,9 @@ Then open <http://127.0.0.1:8080>.
 
 ## Kubernetes
 
-Build and push an image that includes initialized submodules:
+Build and push the image:
 
 ```bash
-git submodule update --init --recursive
 docker build -f deploy/Dockerfile -t savagemindz/lm-eval-webui:latest .
 docker push savagemindz/lm-eval-webui:latest
 ```
@@ -117,9 +84,7 @@ kubectl apply -f deploy/k8s/statefulset.yaml
 ```
 
 Set `OPENAI_BASE_URL` in `deploy/k8s/statefulset.yaml` to the OpenAI-compatible
-endpoint reachable from the pod. If you previously deployed the old Deployment
-manifest, delete or scale down that Deployment before applying the StatefulSet so
-only one pod uses the `ReadWriteOnce` data PVC. The example runs as a
+endpoint reachable from the pod. The example runs as a
 single-replica StatefulSet with `/data` mounted from the `lm-eval-data` PVC. It
 also points Hugging Face
 caches at `/data/huggingface` so downloaded lm-eval datasets persist across pod
@@ -130,18 +95,13 @@ dataset API failures are retried by default, and corrupt cached dataset metadata
 is removed before retrying. Tune retries with `LMEVAL_WEBUI_HF_RETRIES`,
 `LMEVAL_WEBUI_HF_RETRY_DELAY`, and `LMEVAL_WEBUI_HF_RETRY_MAX_DELAY`.
 
-The Kubernetes manifest uses a privileged Docker-in-Docker sidecar. If your
-cluster disallows privileged pods, replace the sidecar with a cluster-native job
-runner before enabling SWE Mini jobs.
-
 ## Job control and API behavior
 
 Queued and running jobs can be cancelled from the Jobs panel. Running
-subprocess groups receive `SIGTERM` and then `SIGKILL` after a grace period;
-SWE Mini containers are labelled and removed as part of cancellation. Active
-jobs must be cancelled before they can be cleared or rerun. After an application
-restart, queued jobs are resumed and jobs interrupted while running are marked
-failed instead of remaining stuck.
+subprocess groups receive `SIGTERM` and then `SIGKILL` after a grace period.
+Active jobs must be cancelled before they can be cleared or rerun. After an
+application restart, queued jobs are resumed and jobs interrupted while running
+are marked failed instead of remaining stuck.
 
 The browser polls only lightweight job summaries and never overlaps polling
 requests. Leaderboard data is refreshed when jobs reach a terminal state, while
@@ -162,7 +122,6 @@ The relevant read APIs are:
 - `GET /api/leaderboard` — compact leaderboard entries
 - `GET /api/results?offset=0&limit=1000&suite=lemonade_bench` — paginated Lemonade Bench rows
 - `GET /api/results?offset=0&limit=1000&suite=lm_eval` — paginated lm-eval rows
-- `GET /api/results?offset=0&limit=1000&suite=swe_mini` — paginated SWE Mini rows
 
 ## Balanced lm-eval profiles and scoring
 
@@ -231,34 +190,10 @@ return final answer content for every request or still reaches its generation
 cap. Use repeated
 `--model MODEL_ID` options to test a subset.
 
-The `gpt-oss-120b-mxfp-GGUF` value in this WebUI is only the default SWE Mini
-judge; selecting or listing it does not send an inference request or preload it.
-Lemonade loads a model when a client asks for that model. With
-`max_loaded_models=1`, unrelated client traffic could otherwise evict a
-benchmark model.
-
 lm-eval jobs load and pin their selected model before the first request, keep it
 pinned across every task batch, and unpin it when the job succeeds, fails, or is
 cancelled. A competing model request receives HTTP 409 instead of evicting the
-benchmark model. SWE Mini temporarily unpins the candidate and pins the
-configured Lemonade judge while judging each task, then restores the candidate
-pin before continuing. SWE Mini advertises a 65,536-token context and an
-independent 16,384-token generation cap by default. This preserves typical
-40K-token agent conversations while bounding generation and keeping a full cold
-prefill inside the default 15-minute provider timeout. Automatic provider
-retries are disabled, and the 60-minute agent task timeout remains independent.
-Context, maximum output tokens, and provider timeout are configurable in the SWE
-Mini benchmark options; provider retries are visibly locked to zero.
-
-SWE Mini treats each Lemonade registration as read-only configuration. It loads
-and pins the selected candidate and judge as already configured, but never
-passes recipe, backend, slot, speculative-decoding/MTP, or save-options
-overrides. The effective policy is persisted with each job as
-`lemonade_unchanged`. A provider timeout is recorded as a zero-score
-infrastructure failure; the runner waits for the candidate backend to become
-idle before continuing so stale requests cannot overlap. Aggregate summaries
-are rebuilt from every completed per-task artifact, including after partial
-runs.
+benchmark model.
 
 Lemonade Bench is intentionally not pinned because the
 upstream CLI reloads models between scenarios and backend/context combinations.
@@ -270,39 +205,56 @@ used model.
 ## Offline bundle (fully disconnected deployment)
 
 The WebUI can run evaluation end-to-end with no internet access. All network
-dependencies (HuggingFace datasets, the local LiveCodeBench data, the NLTK
-resources IFEval needs for scoring, and — optionally — the SWE Mini container
-images) are bundled inside the project tree under `offline/`, so copying the
-project directory is enough to deploy.
+dependencies (HuggingFace datasets, the local LiveCodeBench data, and the NLTK
+resources IFEval needs for scoring) are bundled inside the project tree under
+`offline/`, so copying the project directory is enough to deploy.
 
 On a machine **with** internet access, run:
 
 ```bash
-python3 scripts/prepare_offline.py prepare            # datasets + LiveCodeBench
-python3 scripts/prepare_offline.py prepare --with-docker   # also bundle SWE Mini images
-python3 scripts/prepare_offline.py status             # inspect what was bundled
+python3 scripts/prepare_offline.py packages   # pip wheels + tinyBenchmarks + Lemonade CLI
+python3 scripts/prepare_offline.py prepare    # datasets + LiveCodeBench
+python3 scripts/prepare_offline.py status     # inspect what was bundled
 ```
+
+`packages` bundles every pinned Python dependency as wheels (from
+`requirements.txt`) into `offline/pip/`, vendors the `git+` tinyBenchmarks
+source into `offline/vendor/`, and stores the Lemonade CLI archive in
+`offline/bin/`. The wheelhouse is fully self-contained (wheels only, no
+compilation needed on the offline machine) and covers the WebUI plus the
+`lm-eval[api,tasks]` family (including torch/transformers).
+
+On the disconnected machine, after `prepare` prepared the bundle, run the
+one-command offline installer to build a working venv without any network I/O:
+
+```bash
+python3 scripts/install_offline.sh
+# OFFLINE_VENV_DIR=/path python3 scripts/install_offline.sh   # custom venv path
+.venv/bin/python -m lm_eval_webui --openai-base-url http://<LAN-模型主机>:11434/v1
+```
+
+`install_offline.sh` creates `.venv`, installs everything strictly from
+`offline/pip` with `pip install --no-index --find-links`, installs the vendored
+tinyBenchmarks, and reports the launch command. The offline machine still needs
+a Python 3.14 interpreter; no compiler is required because `packages`
+pre-builds any source-only dependency into a wheel.
 
 `prepare` instantiates every bundled task through the real lm-eval task
 manager, which downloads the exact dataset revisions the evaluator would use
-into `offline/hf-home/`, copies `offline/livecodebench/lcb.jsonl`, and (with
-`--with-docker`) pulls, warms, and exports the SWE-bench per-task container
-images plus the shared bun cache volume into `offline/docker/`. Use
-`--tasks a,b` to bundle a custom task list, `--docker-limit N` to bundle only
-the first N SWE tasks on a trial run, and `HF_ENDPOINT=...` for a registry
+into `offline/hf-home/`, and copies `offline/livecodebench/lcb.jsonl`. Use
+`--tasks a,b` to bundle a custom task list and `HF_ENDPOINT=...` for a registry
 mirror. A failed task is recorded in `offline/MANIFEST.json` instead of
 aborting the whole bundle (`--strict` flips that).
 
 Then copy the entire project directory to the offline machine and run:
 
 ```bash
-python3 scripts/prepare_offline.py activate   # imports Docker images/volume if bundled
 python3 -m lm_eval_webui.server              # start the WebUI normally
 ```
 
 Runtime behavior when `offline/READY` exists:
 
-- Every lm-eval and SWE Mini subprocess is launched with
+- Every lm-eval subprocess is launched with
   `HF_HOME=<project>/offline/hf-home`,
   `HF_HUB_OFFLINE=HF_DATASETS_OFFLINE=TRANSFORMERS_OFFLINE=1`, so all dataset
   reads come from the bundled cache and nothing retries the network.
@@ -311,10 +263,6 @@ Runtime behavior when `offline/READY` exists:
 - `livecodebench_local` is automatically repointed at
   `offline/livecodebench/lcb.jsonl` (the task YAML carries the packaging
   machine's absolute path, which is rewritten on first use).
-- SWE Mini sets `SWE_MINI_KEEP_TASK_IMAGES=1` so task images are never pruned
-  (they cannot be re-pulled offline), tolerates a failed `unzip`/`bun install`
-  check when node_modules is already populated, and still talks to the
-  LAN-internal model endpoint as usual.
 
 Delete `offline/READY` to return to normal online behavior at any time.
 

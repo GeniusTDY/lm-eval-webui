@@ -15,6 +15,3 @@ __pycache__
 deploy/k8s/secret.yaml
 data
 .pi
-third_party/pi-bench/benchmark_results
-third_party/pi-bench/.webui-tasksets
-third_party/pi-bench/node_modules

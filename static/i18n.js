@@ -2,12 +2,11 @@
 
 const I18N_ZH = {
 	Refresh: "刷新",
-	"Run Lemonade Bench, lm-eval, or SWE Mini against installed models and compare each suite on its own leaderboard.":
-		"对已安装的模型运行 Lemonade Bench、lm-eval 或 SWE Mini 基准测试，并在各自的排行榜中比较结果。",
+	"Run Lemonade Bench and lm-eval against installed models and compare each suite on its own leaderboard.":
+		"对已安装的模型运行 Lemonade Bench 与 lm-eval 基准测试，并在各自的排行榜中比较结果。",
 
 	"Lemonade Bench scenarios": "Lemonade Bench 场景",
 	"lm-eval tasks": "lm-eval 任务",
-	"SWE Mini tasks": "SWE Mini 任务",
 
 	"Benchmark setup": "基准测试设置",
 	"OpenAI-compatible base URL": "OpenAI 兼容基础 URL",
@@ -17,7 +16,6 @@ const I18N_ZH = {
 	"Type to search models": "输入关键词筛选模型",
 	"Type to search benchmark scenarios": "输入关键词筛选基准场景",
 	"Type to search 14k+ tasks": "输入关键词筛选 1.4 万+ 任务",
-	"Type to search SWE Mini tasks or repos": "输入关键词筛选 SWE Mini 任务或代码仓库",
 	"Loading models…": "正在加载模型…",
 	"Loading tasks…": "正在加载任务…",
 	"Loading job details…": "正在加载作业详情…",
@@ -36,10 +34,7 @@ const I18N_ZH = {
 	"hide incompatible": "隐藏不兼容任务",
 	"hide gated": "隐藏受限任务",
 	"hide non-English": "隐藏非英语任务",
-	"Lemonade Bench measures TTFT, token throughput, request duration, and memory use. Long-context scenarios are opt-in and can run for a long time.":
-		"Lemonade Bench 度量首 Token 延迟（TTFT）、Token 吞吐量、请求耗时与内存占用。长上下文场景需手动启用，且可能运行较长时间。",
-	"SWE Mini tasks run in Docker SWE-bench containers and are judged by the selected judge model.":
-		"SWE Mini 任务运行于 Docker 的 SWE-bench 容器中，并由所选评审模型判定结果。",
+	"Lemonade Bench measures TTFT, token throughput, request duration, and memory use. Long-context scenarios are opt-in and can run for a long time.": "Lemonade Bench 度量首 Token 延迟（TTFT）、Token 吞吐量、请求耗时与内存占用。长上下文场景需手动启用，且可能运行较长时间。",
 	"Selected scenarios": "已选场景",
 	"No scenarios selected.": "尚未选择任何场景。",
 	"Model runtime options": "模型运行时选项",
@@ -78,15 +73,12 @@ const I18N_ZH = {
 	"Provider timeout minutes": "服务提供方超时（分钟）",
 	"Provider retries": "服务提供方重试次数",
 	"Use Lemonade recipe unchanged": "原样使用 Lemonade 配方",
-	"SWE Mini uses client-side context, output, and timeout limits. It loads the selected candidate and judge as configured but never overrides or saves Lemonade recipe, backend, slot, or MTP options.":
-		"SWE Mini 使用客户端侧的上下文、输出与超时限制；它会按配置加载所选的候选模型与评审模型，但绝不覆盖或保存 Lemonade 的配方、后端、插槽或 MTP 选项。",
 	"Run benchmark": "运行基准测试",
 
 	Leaderboard: "排行榜",
 	"Leaderboard suite": "排行榜套件",
 	"Lemonade Bench leaderboard": "Lemonade Bench 排行榜",
 	"lm-eval leaderboard": "lm-eval 排行榜",
-	"SWE Mini leaderboard": "SWE Mini 排行榜",
 	"No leaderboard results yet.": "排行榜暂无结果。",
 	"Profile": "配置方案",
 	"All profiles": "全部配置方案",
@@ -94,8 +86,6 @@ const I18N_ZH = {
 		"Lemonade Bench 针对每种后端/上下文组合比较平均首 Token 延迟（TTFT）、Token 吞吐量、耗时与峰值内存。点击任意列标题可排序，再次点击可切换排序方向。",
 	"Balanced Overall gives equal weight to reasoning, math, instruction following, and structured output. Rankings are kept separate by profile. Select any column heading to sort; select it again to reverse the order.":
 		"均衡综合得分对推理、数学、指令遵循与结构化输出赋予相同权重，排名按配置方案分别统计。点击任意列标题可排序，再次点击可切换排序方向。",
-	"SWE Mini ranks models by judged task success and shows runtime and average task duration. Select any column heading to sort; select it again to reverse the order.":
-		"SWE Mini 按评审判定的任务成功率对模型排名，并显示运行时长与平均任务耗时。点击任意列标题可排序，再次点击可切换排序方向。",
 
 	"Detailed result filters": "详细结果筛选器",
 	Models: "模型",

@@ -27,7 +27,6 @@ def apply_offline_env(env: dict[str, str]) -> dict[str, str]:
     env["HF_HUB_OFFLINE"] = "1"
     env["HF_DATASETS_OFFLINE"] = "1"
     env["TRANSFORMERS_OFFLINE"] = "1"
-    env["SWE_MINI_KEEP_TASK_IMAGES"] = "1"
     if OFFLINE_NLTK_DATA.is_dir():
         env["NLTK_DATA"] = os.pathsep.join(
             [str(OFFLINE_NLTK_DATA), *(

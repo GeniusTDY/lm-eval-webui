@@ -79,7 +79,6 @@ const CLIENT_BACKENDS = new Set([
 const SUITES = {
 	lemonade_bench: "Lemonade Bench",
 	lm_eval: "lm-eval",
-	swe_mini: "SWE Mini",
 };
 const DETAIL_FILTER_CONFIG = {
 	models: {
@@ -103,11 +102,6 @@ const DETAIL_FILTER_CONFIG = {
 };
 const DEFAULT_LEMONADE_BENCH_RUNS = 3;
 const DEFAULT_LEMONADE_BENCH_TIMEOUT = 1800;
-const DEFAULT_SWE_JUDGE_MODEL = "gpt-oss-120b-mxfp-GGUF";
-const DEFAULT_SWE_TIMEOUT_MINUTES = 60;
-const DEFAULT_SWE_CONTEXT_WINDOW = 65536;
-const DEFAULT_SWE_MAX_OUTPUT_TOKENS = 16384;
-const DEFAULT_SWE_PROVIDER_TIMEOUT_MINUTES = 15;
 const ACTIVE_JOB_STATUSES = new Set(["queued", "running", "cancelling"]);
 const TERMINAL_JOB_STATUSES = new Set(["cancelled", "failed", "succeeded"]);
 const RESULT_PAGE_SIZE = 2000;
@@ -198,12 +192,10 @@ function benchmarkProfileForRecord(record) {
 }
 
 function recordProfileId(record) {
-	if (recordSuite(record) === "swe_mini") return "swe_mini";
 	return benchmarkProfileForRecord(record).id || "custom";
 }
 
 function recordProfileLabel(record) {
-	if (recordSuite(record) === "swe_mini") return "SWE Mini";
 	return profileDisplayLabel(benchmarkProfileForRecord(record));
 }
 
@@ -316,7 +308,6 @@ async function loadModels() {
 		const payload = await api(`/api/models?base_url=${base}`);
 		state.models = payload.models || [];
 		renderModels();
-		renderSweJudgeModels();
 		renderResults();
 	} catch (error) {
 		setText($("modelList"), tf("Could not load models: {0}", error.message));
@@ -486,32 +477,8 @@ function renderModels() {
 			summaryBlock(model.name || model.id, modelMeta(model)),
 		);
 		item.append(label, badgeRow(model.labels || []));
-		list.append(item);
+	list.append(item);
 	});
-}
-
-function renderSweJudgeModels() {
-	const select = $("sweJudgeModel");
-	const previousValue = select.value || DEFAULT_SWE_JUDGE_MODEL;
-	const modelIds = state.models.map((model) => model.id).filter(Boolean);
-	select.replaceChildren();
-	if (!modelIds.length) {
-		select.append(new Option(DEFAULT_SWE_JUDGE_MODEL, DEFAULT_SWE_JUDGE_MODEL));
-		select.value = DEFAULT_SWE_JUDGE_MODEL;
-		select.disabled = true;
-		return;
-	}
-	select.disabled = false;
-	modelIds.forEach((modelId) =>
-		select.append(new Option(modelId, modelId, false, false)),
-	);
-	if (modelIds.includes(previousValue)) {
-		select.value = previousValue;
-	} else if (modelIds.includes(DEFAULT_SWE_JUDGE_MODEL)) {
-		select.value = DEFAULT_SWE_JUDGE_MODEL;
-	} else {
-		select.value = modelIds[0];
-	}
 }
 
 function renderTasks() {
@@ -1019,10 +986,6 @@ function renderLeaderboard() {
 		renderLemonadeBenchLeaderboard(list, entries);
 		return;
 	}
-	if (state.resultSuite === "swe_mini") {
-		renderSweMiniLeaderboard(list, entries);
-		return;
-	}
 	renderLmEvalLeaderboard(list, entries);
 }
 
@@ -1394,91 +1357,6 @@ function renderLemonadeBenchLeaderboard(list, entries) {
 	renderLeaderboardTable(list, rows, columns, "lemonade_bench");
 }
 
-function renderSweMiniLeaderboard(list, entries) {
-	const rows = entries.map((entry, index) => ({
-		entry,
-		model: modelForEntry(entry),
-		modelName: entry.model || entry.model_id || t("unknown model"),
-		rankNumber: index + 1,
-	}));
-	const columns = [
-		{
-			key: "rank",
-			label: "#",
-			sortLabel: "rank",
-			sortValue: (row) => row.rankNumber,
-			cell: (row) => leaderboardCell(`#${row.rankNumber}`, "rank-cell"),
-		},
-		{
-			key: "model",
-			label: "Model",
-			sortValue: (row) => row.modelName,
-			cell: (row) => leaderboardCell(row.modelName, "model-cell", row.modelName),
-		},
-		{
-			key: "runtime-backend",
-			label: "Backend",
-			sortLabel: "Runtime backend",
-			sortValue: (row) => modelBackendLabel(row.entry, row.model),
-			cell: (row) => leaderboardCell(modelBackendLabel(row.entry, row.model)),
-		},
-		{
-			key: "judge",
-			label: "Judge",
-			sortValue: (row) => displayJudgeModel(row.entry.judge_model),
-			cell: (row) => leaderboardCell(displayJudgeModel(row.entry.judge_model)),
-		},
-		{
-			key: "context",
-			label: "Context",
-			sortValue: (row) => numberOrNull(row.entry.context_window),
-			cell: (row) => leaderboardCell(formatContext(row.entry.context_window)),
-		},
-		{
-			key: "max-output",
-			label: "Max output",
-			sortValue: (row) => numberOrNull(row.entry.max_output_tokens),
-			cell: (row) => leaderboardCell(formatContext(row.entry.max_output_tokens)),
-		},
-		{
-			key: "passed",
-			label: "Passed",
-			sortValue: (row) => numberOrNull(row.entry.passed_tasks),
-			cell: (row) =>
-				leaderboardCell(
-					`${row.entry.passed_tasks ?? 0}/${row.entry.total_tasks ?? 0}`,
-				),
-		},
-		{
-			key: "runtime",
-			label: "Runtime",
-			sortValue: (row) => resultRuntimeSeconds(row.entry),
-			cell: (row) =>
-				leaderboardCell(
-					formatRuntimeSeconds(resultRuntimeSeconds(row.entry)),
-					"runtime-cell",
-				),
-		},
-		{
-			key: "success",
-			label: "Success",
-			sortValue: (row) => numberOrNull(row.entry.overall_score),
-			cell: (row) =>
-				leaderboardCell(
-					formatScore(row.entry.overall_score),
-					"score-cell overall-score",
-				),
-		},
-		{
-			key: "average-duration",
-			label: "Avg duration",
-			sortValue: (row) => numberOrNull(row.entry.average_duration_ms),
-			cell: (row) =>
-				leaderboardCell(formatDurationMs(row.entry.average_duration_ms)),
-		},
-	];
-	renderLeaderboardTable(list, rows, columns, "swe_mini");
-}
 
 function detailFilterState() {
 	const profile = state.resultSuite === "lm_eval" ? state.resultProfile : "all";
@@ -1971,28 +1849,6 @@ async function startJobs() {
 			bench_reload_between_runs: $("benchReloadBetweenRuns").checked,
 			bench_log_responses: $("benchLogResponses").checked,
 		});
-	} else if (suite === "swe_mini") {
-		const contextWindow =
-			numberOrNull($("sweContextWindow").value) || DEFAULT_SWE_CONTEXT_WINDOW;
-		const maxOutputTokens =
-			numberOrNull($("sweMaxOutputTokens").value) || DEFAULT_SWE_MAX_OUTPUT_TOKENS;
-		if (maxOutputTokens > contextWindow) {
-			$("setupMessage").textContent = t(
-				"Maximum output tokens cannot exceed the context window.",
-			);
-			return;
-		}
-		Object.assign(body, {
-			judge_model: $("sweJudgeModel").value.trim() || DEFAULT_SWE_JUDGE_MODEL,
-			swe_timeout: Number($("sweTimeout").value || DEFAULT_SWE_TIMEOUT_MINUTES),
-			pass_count: Number($("swePassCount").value || 1),
-			context_window: contextWindow,
-			max_output_tokens: maxOutputTokens,
-			swe_provider_timeout: Number(
-				$("sweProviderTimeout").value || DEFAULT_SWE_PROVIDER_TIMEOUT_MINUTES,
-			),
-			recipe_policy: "lemonade_unchanged",
-		});
 	} else {
 		Object.assign(body, {
 			limit: $("limit").value.trim() || null,
@@ -2021,7 +1877,6 @@ async function startJobs() {
 		state.resultSuite = suite;
 		updateSuiteUi();
 		await loadJobs();
-		if (suite === "swe_mini" && state.activeSuite === suite) await loadTasks();
 	} catch (error) {
 		$("setupMessage").textContent = error.message;
 	}
@@ -2570,7 +2425,6 @@ function selectedTaskCategories() {
 function updateSuiteUi() {
 	const isLemonadeBench = state.activeSuite === "lemonade_bench";
 	const isLmEval = state.activeSuite === "lm_eval";
-	const isSweMini = state.activeSuite === "swe_mini";
 	let taskPlaceholder = "Type to search 14k+ tasks";
 	let taskHint =
 		"OpenAI-compatible chat backends are generation oriented. Use generate_until tasks first.";
@@ -2578,19 +2432,12 @@ function updateSuiteUi() {
 		taskPlaceholder = "Type to search benchmark scenarios";
 		taskHint =
 			"Lemonade Bench measures TTFT, token throughput, request duration, and memory use. Long-context scenarios are opt-in and can run for a long time.";
-	} else if (isSweMini) {
-		taskPlaceholder = "Type to search SWE Mini tasks or repos";
-		taskHint =
-			"SWE Mini tasks run in Docker SWE-bench containers and are judged by the selected judge model.";
 	}
 	let leaderboardDescription =
 		"Balanced Overall gives equal weight to reasoning, math, instruction following, and structured output. Rankings are kept separate by profile. Select any column heading to sort; select it again to reverse the order.";
 	if (state.resultSuite === "lemonade_bench") {
 		leaderboardDescription =
 			"Lemonade Bench compares average TTFT, token throughput, duration, and peak memory for each backend/context combination. Select any column heading to sort; select it again to reverse the order.";
-	} else if (state.resultSuite === "swe_mini") {
-		leaderboardDescription =
-			"SWE Mini ranks models by judged task success and shows runtime and average task duration. Select any column heading to sort; select it again to reverse the order.";
 	}
 	$("taskPanelTitle").textContent = tf(
 		"{0} {1}",
@@ -2617,8 +2464,6 @@ function updateSuiteUi() {
 	$("modelRuntimeOptions").hidden = !isLmEval;
 	$("lemonadeBenchOptions").hidden = !isLemonadeBench;
 	$("lmEvalBenchmarkOptions").hidden = !isLmEval;
-	$("sweMiniBenchmarkOptions").hidden = !isSweMini;
-	$("sweMiniJudgeHint").hidden = !isSweMini;
 	$("resultProfileControl").hidden = state.resultSuite !== "lm_eval";
 	$("taskHint").textContent = t(taskHint);
 	$("leaderboardDescription").textContent = t(leaderboardDescription);
@@ -2633,7 +2478,6 @@ function updateSuiteUi() {
 	for (const button of [
 		$("suiteLemonadeBench"),
 		$("suiteLmEval"),
-		$("suiteSweMini"),
 	]) {
 		button.classList.toggle("active", button.dataset.suite === state.activeSuite);
 	}
@@ -2641,7 +2485,6 @@ function updateSuiteUi() {
 	for (const button of [
 		$("leaderboardLemonadeBench"),
 		$("leaderboardLmEval"),
-		$("leaderboardSweMini"),
 	]) {
 		button.classList.toggle("active", button.dataset.suite === state.resultSuite);
 	}
@@ -2729,9 +2572,6 @@ $("suiteLemonadeBench").addEventListener("click", () =>
 $("suiteLmEval").addEventListener("click", () =>
 	selectBenchmarkSuite("lm_eval"),
 );
-$("suiteSweMini").addEventListener("click", () =>
-	selectBenchmarkSuite("swe_mini"),
-);
 $("leaderboardLemonadeBench").addEventListener(
 	"click",
 	() => void selectResultSuite("lemonade_bench"),
@@ -2739,10 +2579,6 @@ $("leaderboardLemonadeBench").addEventListener(
 $("leaderboardLmEval").addEventListener(
 	"click",
 	() => void selectResultSuite("lm_eval"),
-);
-$("leaderboardSweMini").addEventListener(
-	"click",
-	() => void selectResultSuite("swe_mini"),
 );
 
 document.addEventListener("visibilitychange", () => {

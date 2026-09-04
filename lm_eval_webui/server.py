@@ -32,7 +32,6 @@ from .lemonade_bench import (  # type: ignore[reportMissingImports]
 )
 from .results import lm_eval_profiles
 from .runner import find_lm_eval_python
-from .swe_mini import find_swe_mini_tasks  # type: ignore[reportMissingImports]
 from .telemetry import probe_lemonade_chat_telemetry
 
 COMMON_TASKS = [
@@ -654,14 +653,9 @@ def load_available_tasks(
     run_command: Callable[..., Any] = subprocess.run,
     config_reader: Callable[[str], str | None] | None = None,
     suite: str = "lm_eval",
-    pi_bench_dir: str | Path | None = None,
 ) -> list[dict[str, str]]:
     if suite == LEMONADE_BENCH_SUITE:
         return find_lemonade_bench_scenarios()
-    if suite == "swe_mini":
-        return (
-            find_swe_mini_tasks(pi_bench_dir) if pi_bench_dir else find_swe_mini_tasks()
-        )
     python = find_lm_eval_python(lm_eval_python)
     package_root = find_lm_eval_package_root(python)
     read_config = config_reader or (
@@ -968,7 +962,6 @@ def make_handler(
             lambda suite: load_available_tasks(
                 manager.lm_eval_python,
                 suite=suite,
-                pi_bench_dir=manager.pi_bench_dir,
             )
         )
     if prewarm_tasks:
@@ -1089,7 +1082,7 @@ def make_handler(
             requested_suite = params.get("suite", ["lm_eval"])[0]
             suite = (
                 requested_suite
-                if requested_suite in {LEMONADE_BENCH_SUITE, "swe_mini"}
+                if requested_suite == LEMONADE_BENCH_SUITE
                 else "lm_eval"
             )
             self._cached_json(
@@ -1297,7 +1290,6 @@ def serve(
     lm_eval_python: str | None = None,
     max_concurrent_jobs: int = 1,
     max_request_workers: int = 16,
-    pi_bench_dir: str | Path | None = None,
 ) -> None:
     manager = JobManager(
         data_dir=data_dir,
@@ -1307,7 +1299,6 @@ def serve(
         telemetry_probe=probe_lemonade_chat_telemetry,
         model_metadata_probe=fetch_loaded_model_metadata,
         max_concurrent_jobs=max_concurrent_jobs,
-        pi_bench_dir=pi_bench_dir,
     )
     handler = make_handler(
         manager,

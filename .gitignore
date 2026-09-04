@@ -6,7 +6,11 @@ __pycache__/
 .ruff_cache/
 .venv/
 tinyBenchmarks.pkl
-offline/
+# Offline bundle is tracked, except the platform-specific pip wheelhouse.
+offline/pip/
+# Test scripts and test artifacts are not tracked/pushed.
+tests/
+pytest.ini
 # CI workflow files are not tracked because the push token lacks workflow scope
 .github/workflows/
 

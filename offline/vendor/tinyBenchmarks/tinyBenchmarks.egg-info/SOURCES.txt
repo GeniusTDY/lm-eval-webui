@@ -1,0 +1,10 @@
+LICENSE
+README.md
+setup.cfg
+setup.py
+tinyBenchmarks/__init__.py
+tinyBenchmarks.egg-info/PKG-INFO
+tinyBenchmarks.egg-info/SOURCES.txt
+tinyBenchmarks.egg-info/dependency_links.txt
+tinyBenchmarks.egg-info/requires.txt
+tinyBenchmarks.egg-info/top_level.txt

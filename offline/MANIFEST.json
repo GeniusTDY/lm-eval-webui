@@ -1,0 +1,63 @@
+{
+  "created": "2026-09-04T00:24:43+00:00",
+  "packaged_on": "/workspace/lm-eval-webui",
+  "eval_python": "/root/.pyenv/versions/3.14.7/bin/python",
+  "versions": {
+    "python": "3.14.7",
+    "lm_eval": "0.4.12"
+  },
+  "tasks": {
+    "ifeval": "ok",
+    "gsm8k": "ok",
+    "minerva_math500": "ok",
+    "mmlu_pro_computer_science": "ok",
+    "mmlu_pro_engineering": "ok",
+    "bbh_cot_zeroshot_logical_deduction_five_objects": "ok",
+    "arc_challenge_chat": "ok",
+    "jsonschema_bench_easy": "ok",
+    "livecodebench": "RuntimeError: Dataset scripts are no longer supported (datasets 5.x 不支持脚本式数据集，离线请用 livecodebench_local)",
+    "livecodebench_local": "ok",
+    "truthfulqa_gen": "ok",
+    "bbh_cot_zeroshot": "partial: 13/27 子任务已缓存"
+  },
+  "datasets_cached": [
+    "HuggingFaceH4___math-500",
+    "SaylorTwift___bbh",
+    "TIGER-Lab___mmlu-pro",
+    "allenai___ai2_arc",
+    "epfl-dlab___json_schema_bench",
+    "google___if_eval",
+    "json",
+    "openai___gsm8k",
+    "truthfulqa___truthful_qa"
+  ],
+  "livecodebench": {
+    "bundled": true,
+    "source": "/workspace/lm-eval-webui-lcb/data/lcb.jsonl",
+    "problems": 6
+  },
+  "nltk": {
+    "bundled": true,
+    "resources": [
+      "punkt_tab"
+    ]
+  },
+  "docker": {
+    "bundled": false
+  },
+  "pip": {
+    "bundled": true,
+    "wheels": 144,
+    "sdists": 0,
+    "total_bytes": 3366284595
+  },
+  "tinyBenchmarks": {
+    "bundled": true,
+    "path": "/workspace/lm-eval-webui/offline/vendor/tinyBenchmarks"
+  },
+  "lemonade": {
+    "bundled": true,
+    "file": "lemonade-embeddable-11.6.0-ubuntu-x64.tar.gz",
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.6.0/lemonade-embeddable-11.6.0-ubuntu-x64.tar.gz"
+  }
+}

@@ -10,9 +10,9 @@
     <header>
       <div>
         <h1>Lemonade Benchmark WebUI</h1>
-        <p data-i18n="Run Lemonade Bench, lm-eval, or SWE Mini against installed models and compare each suite on its own leaderboard.">
-          Run Lemonade Bench, lm-eval, or SWE Mini against installed models and
-          compare each suite on its own leaderboard.
+        <p data-i18n="Run Lemonade Bench and lm-eval against installed models and compare each suite on its own leaderboard.">
+          Run Lemonade Bench and lm-eval against installed models and compare
+          each suite on its own leaderboard.
         </p>
       </div>
       <div class="header-controls">
@@ -80,14 +80,6 @@
                 data-i18n="lm-eval tasks"
               >
                 lm-eval tasks
-              </button>
-              <button
-                id="suiteSweMini"
-                type="button"
-                data-suite="swe_mini"
-                data-i18n="SWE Mini tasks"
-              >
-                SWE Mini tasks
               </button>
             </div>
             <div id="lmEvalProfilePicker" class="profile-picker" hidden>
@@ -387,70 +379,6 @@
               <span data-i18n="Log samples">Log samples</span></label
             >
           </div>
-          <div id="sweMiniBenchmarkOptions" class="grid four" hidden>
-            <label
-              ><span data-i18n="Judge model">Judge model</span>
-              <select id="sweJudgeModel">
-                <option value="gpt-oss-120b-mxfp-GGUF" selected>
-                  gpt-oss-120b-mxfp-GGUF
-                </option>
-              </select>
-            </label>
-            <label
-              ><span data-i18n="Timeout minutes">Timeout minutes</span>
-              <input id="sweTimeout" type="number" min="1" value="60" />
-            </label>
-            <label
-              ><span data-i18n="Pass attempts">Pass attempts</span>
-              <input id="swePassCount" type="number" min="1" value="1" />
-            </label>
-            <label
-              ><span data-i18n="Context window">Context window</span>
-              <input
-                id="sweContextWindow"
-                type="number"
-                min="1"
-                value="65536"
-              />
-            </label>
-            <label
-              ><span data-i18n="Maximum output tokens"
-                >Maximum output tokens</span
-              >
-              <input
-                id="sweMaxOutputTokens"
-                type="number"
-                min="1"
-                value="16384"
-              />
-            </label>
-            <label
-              ><span data-i18n="Provider timeout minutes"
-                >Provider timeout minutes</span
-              >
-              <input id="sweProviderTimeout" type="number" min="1" value="15" />
-            </label>
-            <label
-              ><span data-i18n="Provider retries">Provider retries</span>
-              <input id="sweProviderRetries" type="number" value="0" disabled />
-            </label>
-            <label class="check"
-              ><input id="sweRecipePolicy" type="checkbox" checked disabled />
-              <span data-i18n="Use Lemonade recipe unchanged"
-                >Use Lemonade recipe unchanged</span
-              ></label
-            >
-          </div>
-          <p
-            id="sweMiniJudgeHint"
-            class="hint"
-            hidden
-            data-i18n="SWE Mini uses client-side context, output, and timeout limits. It loads the selected candidate and judge as configured but never overrides or saves Lemonade recipe, backend, slot, or MTP options."
-          >
-            SWE Mini uses client-side context, output, and timeout limits. It
-            loads the selected candidate and judge as configured but never
-            overrides or saves Lemonade recipe, backend, slot, or MTP options.
-          </p>
         </details>
         <div class="row actions">
           <button id="startJobs" class="primary" type="button">
@@ -501,14 +429,6 @@
             data-i18n="lm-eval leaderboard"
           >
             lm-eval leaderboard
-          </button>
-          <button
-            id="leaderboardSweMini"
-            type="button"
-            data-suite="swe_mini"
-            data-i18n="SWE Mini leaderboard"
-          >
-            SWE Mini leaderboard
           </button>
         </div>
         <div id="leaderboard" class="leaderboard empty">
@@ -611,7 +531,6 @@
                   </option>
                   <option value="lemonade_bench">Lemonade Bench</option>
                   <option value="lm_eval">lm-eval</option>
-                  <option value="swe_mini">SWE Mini</option>
                 </select>
               </label>
               <span id="visibleJobCount" class="hint" data-i18n="0 jobs"

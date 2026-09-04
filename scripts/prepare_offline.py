@@ -23,12 +23,17 @@ from lm_eval_webui.offline import (  # noqa: E402
 from lm_eval_webui.results import BALANCED_PROFILE_TASKS  # noqa: E402
 from lm_eval_webui.runner import find_lm_eval_python  # noqa: E402
 
-SWE_REGISTRY_DEFAULT = "ghcr.io/epoch-research/swe-bench.eval.x86_64"
-BUN_CACHE_VOLUME = "pi-bench-bun-cache"
-DOCKER_DIR = OFFLINE_ROOT / "docker"
-DOCKER_IMAGE_DIR = DOCKER_DIR / "images"
-BUN_CACHE_ARCHIVE = DOCKER_DIR / "pi-bench-bun-cache.tar.gz"
 MANIFEST_PATH = OFFLINE_ROOT / "MANIFEST.json"
+PIP_WHEELS_DIR = OFFLINE_ROOT / "pip"
+OFFLINE_VENDOR_DIR = OFFLINE_ROOT / "vendor"
+OFFLINE_BIN_DIR = OFFLINE_ROOT / "bin"
+REQUIREMENTS_TXT = REPO_ROOT / "requirements.txt"
+TINY_BENCHMARKS_URL = "https://github.com/felipemaiapolo/tinyBenchmarks"
+TINY_BENCHMARKS_DIR = OFFLINE_VENDOR_DIR / "tinyBenchmarks"
+LEMONADE_CLI_VERSION = "11.6.0"
+LEMONADE_CLI_URL = ("https://github.com/lemonade-sdk/lemonade/releases/download/"
+                    f"v{LEMONADE_CLI_VERSION}/lemonade-embeddable-{LEMONADE_CLI_VERSION}-ubuntu-"
+                    "$ARCH.tar.gz")
 LCB_DEFAULT_SOURCES = (
     REPO_ROOT.parent / "lm-eval-webui-lcb" / "data" / "lcb.jsonl",
     REPO_ROOT / "data" / "lcb.jsonl",
@@ -112,7 +117,6 @@ def _clean_bundle() -> None:
         OFFLINE_HF_HOME,
         OFFLINE_ROOT / "livecodebench",
         OFFLINE_NLTK_DATA,
-        DOCKER_DIR,
     ):
         if stale.exists():
             shutil.rmtree(stale)
@@ -152,137 +156,132 @@ def _bundle_nltk(eval_python: Path) -> dict:
     return {"bundled": True, "resources": ["punkt_tab"]}
 
 
-def _swe_task_ids(pi_bench_dir: Path, limit: int | None) -> list[str]:
-    task_dir = pi_bench_dir / "tasks" / "verified-mini"
-    ids = []
-    for task_file in sorted(task_dir.glob("*.json")):
-        try:
-            data = json.loads(task_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if task_id := str(data.get("id") or ""):
-            ids.append(task_id)
-    if limit:
-        ids = ids[:limit]
-    return ids
+def _lemonade_arch() -> str:
+    machine = os.uname().machine
+    if machine in ("x86_64", "amd64"):
+        return "x64"
+    if machine in ("aarch64", "arm64"):
+        return "arm64"
+    raise RuntimeError(f"不受支持的架构：{machine}（仅 x86_64 / arm64）")
 
 
-def _docker_available() -> bool:
-    try:
-        return subprocess.run(  # noqa: S603, S607
-            ["docker", "info"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        ).returncode == 0
-    except OSError:
-        return False
+def _strip_git_requirements() -> Path:
+    PIP_WHEELS_DIR.mkdir(parents=True, exist_ok=True)
+    out = PIP_WHEELS_DIR / "requirements.offline.txt"
+    kept: list[str] = []
+    if REQUIREMENTS_TXT.is_file():
+        for line in REQUIREMENTS_TXT.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("git+"):
+                continue
+            kept.append(line)
+    out.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    return out
 
 
-def _bundle_docker(registry: str, pi_bench_dir: Path, limit: int | None) -> dict:
-    if not _docker_available():
-        raise RuntimeError(
-            "docker 不可用（守护进程未运行或未安装）。"
-            "如不需要离线 SWE Mini，请去掉 --with-docker 重新打包。"
-        )
-
-    task_ids = _swe_task_ids(pi_bench_dir, limit)
-    if not task_ids:
-        raise RuntimeError(f"未找到 SWE Mini 任务文件：{pi_bench_dir / 'tasks' / 'verified-mini'}")
-
-    print(f"[docker] 拉取 {len(task_ids)} 个 SWE 任务镜像 …")
-    images: dict[str, str] = {}
-    failed: list[str] = []
-    for task_id in task_ids:
-        image = f"{registry}.{task_id}:latest"
-        result = _run(
-            ["docker", "pull", image],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        if result.returncode == 0:
-            images[task_id] = image
-        else:
-            failed.append(task_id)
-            print(f"  [WARN] 拉取失败，跳过：{image}")
-    if not images:
-        raise RuntimeError("没有任何 SWE 任务镜像拉取成功。")
-
-    warm_image = next(iter(images.values()))
-    print(f"[docker] 预热 bun 缓存卷与 node_modules（镜像 {warm_image}）…")
-    _run(["docker", "volume", "create", BUN_CACHE_VOLUME], check=False,
-         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    warm_script = (
-        "set -e; "
-        "if [ ! -f /root/.bun/bin/bun ]; then "
-        "apt-get update -qq && apt-get install -y -qq unzip >/dev/null 2>&1; "
-        "curl -fsSL https://bun.sh/install | bash >/dev/null 2>&1; "
-        "fi; "
-        "export PATH=/root/.bun/bin:$PATH; "
-        "cd /pi-bench && bun install"
-    )
+def _bundle_pip_wheels() -> dict:
+    req = _strip_git_requirements()
+    print(f"[pip] 下载 {REQUIREMENTS_TXT.name} 音到的 wheels 到 {PIP_WHEELS_DIR} …")
     result = _run(
         [
-            "docker", "run", "--rm", "--network", "host",
-            "-v", f"{pi_bench_dir}:/pi-bench:z",
-            "-v", f"{BUN_CACHE_VOLUME}:/root/.bun",
-            warm_image,
-            "bash", "-c", warm_script,
+            sys.executable, "-m", "pip", "download",
+            "-r", str(req),
+            "-d", str(PIP_WHEELS_DIR),
         ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    wheels = sorted(PIP_WHEELS_DIR.glob("*.whl"))
+    sdists = sorted(PIP_WHEELS_DIR.glob("*.tar.gz"))
+    print(result.stdout[-3000:] if result.returncode != 0 else f"[pip] 下载完成：{len(wheels)} 个 wheel, {len(sdists)} 个源码包")
+    return {
+        "bundled": result.returncode == 0,
+        "wheels": len(wheels),
+        "sdists": len(sdists),
+        "total_bytes": sum(2 + p.stat().st_size for p in PIP_WHEELS_DIR.iterdir()),
+    }
+
+
+def _bundle_tinybenchmarks() -> dict:
+    if TINY_BENCHMARKS_DIR.is_dir():
+        shutil.rmtree(TINY_BENCHMARKS_DIR)
+    TINY_BENCHMARKS_DIR.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[tinyBenchmarks] 克隆 {TINY_BENCHMARKS_URL} …")
+    result = _run(
+        ["git", "clone", "--depth", "1", TINY_BENCHMARKS_URL, str(TINY_BENCHMARKS_DIR)],
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError("bun 缓存预热失败，无法保证离线 SWE Mini 可用。")
+        shutil.rmtree(TINY_BENCHMARKS_DIR, ignore_errors=True)
+        return {"bundled": False}
+    if (TINY_BENCHMARKS_DIR / ".git").exists():
+        shutil.rmtree(TINY_BENCHMARKS_DIR / ".git")
+    return {"bundled": True, "path": str(TINY_BENCHMARKS_DIR)}
 
-    DOCKER_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[docker] 导出 {len(images)} 个镜像到 {DOCKER_IMAGE_DIR} …")
-    for task_id, image in images.items():
-        tar_path = DOCKER_IMAGE_DIR / f"{task_id}.tar"
-        with tar_path.open("wb") as tar_file:
-            result = _run(
-                ["docker", "save", image],
-                stdout=tar_file,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-        if result.returncode != 0:
-            tar_path.unlink(missing_ok=True)
-            print(f"  [WARN] 导出失败：{image}")
-            failed.append(task_id)
 
-    print("[docker] 导出 bun 缓存卷 …")
-    with BUN_CACHE_ARCHIVE.open("wb") as archive_file:
-        result = _run(
-            [
-                "docker", "run", "--rm",
-                "-v", f"{BUN_CACHE_VOLUME}:/data",
-                warm_image,
-                "bash", "-c", "tar czf - -C /data .",
-            ],
-            stdout=archive_file,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+def _bundle_lemonade_cli(version: str | None = None) -> dict:
+    version = version or LEMONADE_CLI_VERSION
+    arch = _lemonade_arch()
+    filename = (f"lemonade-embeddable-{version}-ubuntu-{arch}.tar.gz")
+    url = LEMONADE_CLI_URL.replace("$ARCH", arch).replace(LEMONADE_CLI_VERSION, version)
+    dest = OFFLINE_BIN_DIR / filename
+    OFFLINE_BIN_DIR.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        dest.unlink()
+    print(f"[lemonade] 下载 {url} …")
+    result = _run(
+        ["curl", "-fsSL", url, "-o", str(dest)],
+        check=False,
+    )
     if result.returncode != 0:
-        BUN_CACHE_ARCHIVE.unlink(missing_ok=True)
-        print("  [WARN] bun 缓存卷导出失败。")
+        dest.unlink(missing_ok=True)
+        return {"bundled": False}
+    return {"bundled": True, "file": dest.name, "url": url}
 
-    return {
-        "registry": registry,
-        "images": images,
-        "failed_tasks": failed,
-        "bun_cache_exported": BUN_CACHE_ARCHIVE.is_file(),
-        "node_modules_warmed": (pi_bench_dir / "node_modules").is_dir(),
-    }
+
+def cmd_packages(args: argparse.Namespace) -> int:
+    print(f"== 内置 Python 依赖（离线机器免网络安装）==\n  目标：{OFFLINE_ROOT}")
+    pip_info = _bundle_pip_wheels()
+    if not pip_info["bundled"]:
+        print("[ERROR] pip wheels 下载失败，中止。请检查网络/PyPI 可用性。")
+        return 1
+    tb_info = _bundle_tinybenchmarks()
+    if not tb_info["bundled"]:
+        print("[ERROR] tinyBenchmarks 内置失败。")
+        return 1
+    lem_info = _bundle_lemonade_cli(args.lemonade_version)
+
+    manifest = {}
+    if MANIFEST_PATH.is_file():
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest.update({
+        "created": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "packaged_on": str(REPO_ROOT),
+        "pip": pip_info,
+        "tinyBenchmarks": tb_info,
+        "lemonade": lem_info,
+    })
+    OFFLINE_ROOT.mkdir(parents=True, exist_ok=True)
+    MANIFEST_PATH.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print("\n== 打包完成 ==")
+    print(f"  wheels/sdists  {pip_info['wheels']}/{pip_info['sdists']}（{pip_info['total_bytes']//1024//1024} MB）")
+    print(f"  tinyBenchmarks {'是' if tb_info.get('bundled') else '否'}")
+    print(f"  Lemonade CLI   {'是' if lem_info.get('bundled') else '否'}"
+          + (f"（{lem_info.get('file')}）" if lem_info.get('bundled') else ""))
+    print("\n在离线机器上运行:")
+    print("  1) python3 -m venv .venv")
+    print("  2) pip install --no-index --find-links offline/pip -r offline/pip/requirements.offline.txt")
+    print("  3) pip install --no-index --find-links offline/pip offline/vendor/tinyBenchmarks")
+    print("  4) 启动 WebUI（见 scripts/install_offline.sh 一键完成）")
+    return 0
 
 
 def cmd_prepare(args: argparse.Namespace) -> int:
     print(f"== 离线打包：{REPO_ROOT} ==")
-    if args.with_docker and not _docker_available():
-        print("[ERROR] --with-docker 需要 docker（守护进程未运行或未安装）。")
-        print("        如不需要离线 SWE Mini，请去掉 --with-docker 重新运行。")
-        return 1
     _clean_bundle()
 
     eval_python = Path(args.python or find_lm_eval_python())
@@ -337,12 +336,6 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     else:
         nltk_info = {"bundled": False}
 
-    docker_info: dict = {"bundled": False}
-    if args.with_docker:
-        registry = os.environ.get("SWE_BENCH_IMAGE_REGISTRY", SWE_REGISTRY_DEFAULT)
-        pi_bench_dir = REPO_ROOT / "third_party" / "pi-bench"
-        docker_info = {"bundled": True, **_bundle_docker(registry, pi_bench_dir, args.docker_limit)}
-
     datasets_cached = sorted(
         p.name for p in (OFFLINE_HF_HOME / "datasets").glob("*") if p.is_dir()
     ) if (OFFLINE_HF_HOME / "datasets").is_dir() else []
@@ -355,7 +348,6 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         "datasets_cached": datasets_cached,
         "livecodebench": lcb_info,
         "nltk": nltk_info,
-        "docker": docker_info,
     }
     OFFLINE_ROOT.mkdir(parents=True, exist_ok=True)
     MANIFEST_PATH.write_text(
@@ -378,13 +370,11 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     print(f"  数据集    {len(datasets_cached)} 个（HF_HOME={OFFLINE_HF_HOME}）")
     print(f"  LCB 本地  {'是' if lcb_info['bundled'] else '否'}")
     print(f"  NLTK      {'是' if nltk_info.get('bundled') else '否'}")
-    print(f"  Docker    {'是' if docker_info.get('bundled') else '否'}")
     if bad_tasks:
         print(f"  失败任务  {', '.join(bad_tasks)}")
     print()
     print("把整个项目目录拷到离线机器后：")
-    print("  1) python3 scripts/prepare_offline.py activate   # 导入 Docker 资产（如已打包）")
-    print("  2) 正常启动 WebUI —— 自动进入离线模式")
+    print("  正常启动 WebUI —— 自动进入离线模式")
     return 0
 
 
@@ -392,54 +382,7 @@ def cmd_activate(args: argparse.Namespace) -> int:
     if not OFFLINE_READY_MARKER.is_file():
         print("[ERROR] 未发现 offline/READY —— 请先把完整项目目录拷贝过来。")
         return 1
-
-    docker_files = sorted(DOCKER_IMAGE_DIR.glob("*.tar")) if DOCKER_IMAGE_DIR.is_dir() else []
-    need_docker = bool(docker_files or BUN_CACHE_ARCHIVE.is_file())
-    if need_docker and not _docker_available():
-        print("[ERROR] 捆绑包含 Docker 资产但 docker 不可用，无法激活。")
-        return 1
-
-    loaded = 0
-    for tar_path in docker_files:
-        if _run(["docker", "load", "-i", str(tar_path)], check=False,
-                 stdout=subprocess.DEVNULL).returncode == 0:
-            loaded += 1
-        else:
-            print(f"  [WARN] 镜像导入失败：{tar_path.name}")
-    if docker_files:
-        print(f"[docker] 已导入 {loaded}/{len(docker_files)} 个镜像")
-
-    if BUN_CACHE_ARCHIVE.is_file():
-        manifest = {}
-        if MANIFEST_PATH.is_file():
-            manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-        warm_image = next(
-            iter((manifest.get("docker") or {}).get("images", {}).values()), None
-        )
-        if warm_image:
-            _run(["docker", "volume", "create", BUN_CACHE_VOLUME], check=False,
-                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            with BUN_CACHE_ARCHIVE.open("rb") as archive_file:
-                result = _run(
-                    [
-                        "docker", "run", "--rm", "-i",
-                        "-v", f"{BUN_CACHE_VOLUME}:/data",
-                        warm_image,
-                        "bash", "-c", "tar xzf - -C /data",
-                    ],
-                    stdin=archive_file,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                )
-            print(
-                "[docker] bun 缓存卷导入成功"
-                if result.returncode == 0
-                else "[WARN] bun 缓存卷导入失败"
-            )
-        else:
-            print("[WARN] 清单中无镜像信息，跳过 bun 缓存卷导入。")
-
-    print("[INFO] 离线环境已激活，可直接启动 WebUI。")
+    print("[INFO] 离线环境已就绪，可直接启动 WebUI。")
     return 0
 
 
@@ -459,10 +402,6 @@ def cmd_status(_args: argparse.Namespace) -> int:
         print(f"数据集          {', '.join(manifest.get('datasets_cached') or []) or '无'}")
         print(f"LCB 本地数据    {'是' if (manifest.get('livecodebench') or {}).get('bundled') else '否'}")
         print(f"NLTK 资源       {'是' if (manifest.get('nltk') or {}).get('bundled') else '否'}")
-        docker = manifest.get("docker") or {}
-        if docker.get("bundled"):
-            print(f"SWE 镜像        {len(docker.get('images') or {})} 个，"
-                  f"bun 缓存卷 {'已导出' if docker.get('bun_cache_exported') else '缺失'}")
     else:
         print("清单            无（未打包或打包失败）")
     return 0
@@ -474,18 +413,22 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_prepare = sub.add_parser("prepare", help="联网机器上运行：打包离线捆绑")
-    p_prepare.add_argument("--with-docker", action="store_true",
-                           help="同时打包 SWE Mini 容器镜像与 bun 缓存（体积较大）")
     p_prepare.add_argument("--python", help="评测用 python 解释器路径（默认自动探测）")
     p_prepare.add_argument("--tasks", help="逗号分隔的任务列表（默认内置全部常用任务）")
     p_prepare.add_argument("--lcb-source", help="lcb.jsonl 源路径（默认自动探测）")
-    p_prepare.add_argument("--docker-limit", type=int, default=None,
-                           help="仅打包前 N 个 SWE 任务镜像（试用）")
     p_prepare.add_argument("--strict", action="store_true",
                            help="任何任务缓存失败则不写入 READY 标记")
     p_prepare.set_defaults(func=cmd_prepare)
 
-    p_activate = sub.add_parser("activate", help="离线机器上运行：导入 Docker 资产")
+    p_packages = sub.add_parser(
+        "packages",
+        help="内置 Python/源码依赖（pip wheels、tinyBenchmarks、Lemonade CLI）",
+    )
+    p_packages.add_argument("--lemonade-version", default=LEMONADE_CLI_VERSION,
+                            help=f"Lemonade CLI 版本（默认 {LEMONADE_CLI_VERSION}）")
+    p_packages.set_defaults(func=cmd_packages)
+
+    p_activate = sub.add_parser("activate", help="离线机器上运行：校验离线环境已就绪")
     p_activate.set_defaults(func=cmd_activate)
 
     p_status = sub.add_parser("status", help="查看离线捆绑状态")

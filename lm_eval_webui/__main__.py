@@ -22,7 +22,6 @@ def main() -> None:
     parser.add_argument("--lm-eval-python", default=None)
     parser.add_argument("--max-concurrent-jobs", type=int, default=1)
     parser.add_argument("--max-request-workers", type=int, default=16)
-    parser.add_argument("--pi-bench-dir", default=None)
     args = parser.parse_args()
     serve_kwargs: dict[str, Any] = {
         "host": args.host,
@@ -33,7 +32,6 @@ def main() -> None:
         "lm_eval_python": args.lm_eval_python,
         "max_concurrent_jobs": args.max_concurrent_jobs,
         "max_request_workers": args.max_request_workers,
-        "pi_bench_dir": args.pi_bench_dir,
     }
     serve(**serve_kwargs)
 

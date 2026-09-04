@@ -57,32 +57,9 @@ from .runner import (
     EvalRequest,
     build_eval_command,
 )
-from .swe_mini import (  # type: ignore[reportMissingImports]
-    DEFAULT_SWE_MINI_CONTEXT_WINDOW,
-    DEFAULT_SWE_MINI_JUDGE_MODEL,
-    DEFAULT_SWE_MINI_MAX_OUTPUT_TOKENS,
-    DEFAULT_SWE_MINI_PLATFORM,
-    DEFAULT_SWE_MINI_PROVIDER_MAX_RETRIES,
-    DEFAULT_SWE_MINI_PROVIDER_TIMEOUT_MINUTES,
-    DEFAULT_SWE_MINI_TIMEOUT_MINUTES,
-    LAUNCH_CWD_ENV,
-    SWE_JUDGE_MODEL_ENV,
-    SWE_MINI_RECIPE_POLICY,
-    SWE_MINI_SUITE,
-    SweMiniRequest,
-    build_swe_mini_command,
-    cleanup_swe_mini_task_target,
-    default_pi_bench_dir,
-    extract_swe_mini_leaderboard_entry,
-    extract_swe_mini_result_rows,
-    find_swe_mini_result_files,
-    materialize_swe_mini_task_target,
-    normalize_swe_mini_judge_model,
-    swe_mini_model_lifecycle_env,
-    swe_mini_output_path,
-    write_swe_mini_summary,
-)
 from .telemetry import aggregate_telemetry_file
+
+LAUNCH_CWD_ENV = "LMEVAL_WEBUI_LAUNCH_CWD"
 
 Launcher = Callable[[list[str], dict[str, str], Path], int]
 TelemetryProbe = Callable[[str, str], dict[str, Any]]
@@ -92,10 +69,6 @@ ModelUnpinner = Callable[[str, str, int], dict[str, Any]]
 LLAMACPP_BACKENDS = {"system", "vulkan", "rocm"}
 LM_EVAL_REQUEST_PROGRESS_RE = re.compile(
     r"Requesting API:[^\r\n]*?\|\s*(\d+)/(\d+)\s*\["
-)
-SWE_MINI_PROGRESS_RE = re.compile(r"^\[(\d+)/(\d+)\] Task:", re.MULTILINE)
-SWE_MINI_COMPLETE_RE = re.compile(
-    r"Tasks:\s*(\d+)\s*\|\s*Succeeded:\s*(\d+)\s*\|\s*Failed:\s*(\d+)"
 )
 ACTIVE_JOB_STATUSES = {"queued", "running", "cancelling"}
 TERMINAL_JOB_STATUSES = {"cancelled", "failed", "succeeded"}
@@ -144,7 +117,6 @@ class JobManager:
         telemetry_probe: TelemetryProbe | None = None,
         model_metadata_probe: ModelMetadataProbe | None = None,
         max_concurrent_jobs: int = 1,
-        pi_bench_dir: str | Path | None = None,
         protect_models: bool | None = None,
         model_pin_loader: ModelPinLoader | None = None,
         model_unpinner: ModelUnpinner | None = None,
@@ -166,11 +138,6 @@ class JobManager:
         )
         self.model_pin_loader = model_pin_loader or load_and_pin_model
         self.model_unpinner = model_unpinner or unpin_model
-        self.pi_bench_dir = (
-            Path(pi_bench_dir)
-            if pi_bench_dir
-            else default_pi_bench_dir(self.project_root)
-        )
         self._active_jobs = 0
         self._scheduler = threading.Condition(threading.RLock())
         self._pending_jobs: deque[str] = deque()
@@ -287,7 +254,6 @@ class JobManager:
             "command",
             "log_path",
             "output_path",
-            "pi_bench_output_path",
             "result_files",
             "tasks",
             "telemetry_path",
@@ -399,7 +365,6 @@ class JobManager:
             if status == "queued":
                 job["status"] = "cancelled"
                 job["cancelled_at"] = now
-                self._cleanup_swe_task_target(job)
             else:
                 job["status"] = "cancelling"
             self._write_job(job)
@@ -411,13 +376,6 @@ class JobManager:
             job_id = str(job["id"])
             if job.get("status") == "cancelling":
                 self._terminate_active_process(job_id)
-                if self._job_suite(job) == SWE_MINI_SUITE:
-                    threading.Thread(
-                        target=self._stop_swe_containers,
-                        args=(job_id,),
-                        name=f"cancel-swe-{job_id}",
-                        daemon=True,
-                    ).start()
         return len(changed)
 
     def _stored_jobs(self) -> list[dict[str, Any]]:
@@ -432,29 +390,6 @@ class JobManager:
         for job in self._stored_jobs():
             status = str(job.get("status") or "")
             if status == "queued":
-                if self._job_suite(job) == SWE_MINI_SUITE:
-                    raw_options = job.get("swe_options")
-                    options = raw_options if isinstance(raw_options, dict) else {}
-                    try:
-                        task_target = materialize_swe_mini_task_target(
-                            options.get("pi_bench_dir", self.pi_bench_dir),
-                            [str(task) for task in job.get("tasks") or []],
-                            str(job["id"]),
-                        )
-                        options["task_target"] = task_target
-                        job["swe_options"] = options
-                        command, _env = build_swe_mini_command(
-                            self._swe_request_from_job(job)
-                        )
-                        job["command"] = command
-                        self._write_job(job)
-                    except (OSError, ValueError) as exc:
-                        job["status"] = "failed"
-                        job["error"] = f"Could not recover queued job: {exc}"
-                        job["updated_at"] = time.time()
-                        self._write_job(job)
-                        interrupted = True
-                        continue
                 queued.append(job)
                 continue
             if status not in {"running", "cancelling"}:
@@ -529,11 +464,7 @@ class JobManager:
         rows: list[dict[str, Any]] = []
         entries: list[dict[str, Any]] = []
         suite = self._job_suite(job)
-        result_files = (
-            self._swe_mini_result_files(job)
-            if suite == SWE_MINI_SUITE
-            else [Path(str(path)) for path in job.get("result_files", [])]
-        )
+        result_files = [Path(str(path)) for path in job.get("result_files", [])]
         result_jsons: list[dict[str, Any]] = []
         benchmark_profile = benchmark_profile_for_job(job)
         runtime_seconds = job_runtime_seconds(job)
@@ -547,9 +478,6 @@ class JobManager:
                 entries.extend(
                     extract_lemonade_bench_leaderboard_entries(job, result_json)
                 )
-            elif suite == SWE_MINI_SUITE:
-                rows.extend(extract_swe_mini_result_rows(job, result_json))
-                entries.append(extract_swe_mini_leaderboard_entry(job, result_json))
             else:
                 rows.extend(
                     extract_result_rows(
@@ -599,8 +527,6 @@ class JobManager:
         suite = self._payload_suite(payload)
         if suite == LEMONADE_BENCH_SUITE:
             return self._create_lemonade_bench_job(model_id, tasks, payload)
-        if suite == SWE_MINI_SUITE:
-            return self._create_swe_mini_job(model_id, tasks, payload)
         job_id = uuid.uuid4().hex[:12]
         output_path = self.runs_dir / job_id
         log_path = self.logs_dir / f"{job_id}.log"
@@ -796,105 +722,6 @@ class JobManager:
         self._write_job(job)
         return self._public_job(job)
 
-    def _create_swe_mini_job(
-        self, model_id: str, tasks: list[str], payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        job_id = uuid.uuid4().hex[:12]
-        log_path = self.logs_dir / f"{job_id}.log"
-        platform = str(payload.get("platform") or DEFAULT_SWE_MINI_PLATFORM)
-        output_path = swe_mini_output_path(
-            model_id, job_id, platform, pi_bench_dir=self.pi_bench_dir
-        )
-        task_target = materialize_swe_mini_task_target(self.pi_bench_dir, tasks, job_id)
-        judge_model = normalize_swe_mini_judge_model(
-            str(payload.get("judge_model") or DEFAULT_SWE_MINI_JUDGE_MODEL)
-        )
-        timeout_minutes = self._int_or_default(
-            payload.get("swe_timeout", payload.get("timeout_minutes")),
-            DEFAULT_SWE_MINI_TIMEOUT_MINUTES,
-        )
-        pass_count = self._int_or_default(payload.get("pass_count"), 1)
-        context_window = self._int_or_default(
-            payload.get("context_window"), DEFAULT_SWE_MINI_CONTEXT_WINDOW
-        )
-        max_output_tokens = self._int_or_default(
-            payload.get("max_output_tokens", payload.get("swe_max_output_tokens")),
-            DEFAULT_SWE_MINI_MAX_OUTPUT_TOKENS,
-        )
-        max_output_tokens = min(context_window, max_output_tokens)
-        provider_timeout_minutes = self._int_or_default(
-            payload.get("swe_provider_timeout"),
-            DEFAULT_SWE_MINI_PROVIDER_TIMEOUT_MINUTES,
-        )
-        provider = str(payload.get("swe_provider") or "lemonade")
-        openai_base_url = payload.get(
-            "openai_base_url", payload.get("lemonade_base_url", self.openai_base_url)
-        )
-        request = SweMiniRequest(
-            model_id=model_id,
-            task_target=task_target,
-            output_path=str(output_path),
-            pi_bench_dir=self.pi_bench_dir,
-            project_root=self.project_root,
-            openai_base_url=str(openai_base_url),
-            provider=provider,
-            judge_model=judge_model,
-            platform=platform,
-            model_tag=job_id,
-            timeout_minutes=timeout_minutes,
-            pass_count=pass_count,
-            context_window=context_window,
-            max_output_tokens=max_output_tokens,
-            provider_timeout_minutes=provider_timeout_minutes,
-        )
-        command, env = build_swe_mini_command(request)
-        env["LMEVAL_WEBUI_JOB_ID"] = job_id
-        now = time.time()
-        swe_options = {
-            "provider": provider,
-            "judge_model": judge_model,
-            "platform": platform,
-            "model_tag": job_id,
-            "timeout_minutes": timeout_minutes,
-            "pass_count": pass_count,
-            "context_window": context_window,
-            "max_output_tokens": max_output_tokens,
-            "provider_timeout_minutes": provider_timeout_minutes,
-            "provider_max_retries": DEFAULT_SWE_MINI_PROVIDER_MAX_RETRIES,
-            "recipe_policy": SWE_MINI_RECIPE_POLICY,
-            "task_target": task_target,
-            "pi_bench_dir": str(self.pi_bench_dir),
-            "openai_base_url": str(openai_base_url),
-        }
-        job: dict[str, Any] = {
-            "id": job_id,
-            "suite": SWE_MINI_SUITE,
-            "model_id": model_id,
-            "tasks": tasks,
-            "status": "queued",
-            "created_at": now,
-            "updated_at": now,
-            "command": command,
-            "output_path": str(output_path),
-            "log_path": str(log_path),
-            "openai_base_url": str(openai_base_url).rstrip("/"),
-            "lemonade_base_url": str(openai_base_url).rstrip("/"),
-            "backend": SWE_MINI_SUITE,
-            "swe_options": swe_options,
-            "telemetry": {},
-            "result_files": [],
-            "returncode": None,
-            "error": None,
-            "_env": env,
-        }
-        if payload.get("rerun_of"):
-            job["rerun_of"] = str(payload["rerun_of"])
-        if context_window:
-            job["context_window"] = context_window
-        job["max_output_tokens"] = max_output_tokens
-        self._write_job(job)
-        return self._public_job(job)
-
     def _enqueue_job(self, job_id: str) -> None:
         with self._scheduler:
             if job_id in self._pending_job_ids:
@@ -1018,43 +845,6 @@ class JobManager:
             except OSError:
                 return
 
-    @staticmethod
-    def _stop_swe_containers(job_id: str) -> None:
-        try:
-            listed = subprocess.run(  # noqa: S603
-                [
-                    "docker",
-                    "ps",
-                    "-aq",
-                    "--filter",
-                    f"label=lm-eval-webui.job-id={job_id}",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            container_ids = listed.stdout.split()
-            if container_ids:
-                subprocess.run(  # noqa: S603
-                    ["docker", "rm", "-f", *container_ids],
-                    check=False,
-                    capture_output=True,
-                    timeout=30,
-                )
-        except (OSError, subprocess.SubprocessError):
-            return
-
-    def _cleanup_swe_task_target(self, job: dict[str, Any]) -> None:
-        if self._job_suite(job) != SWE_MINI_SUITE:
-            return
-        raw_options = job.get("swe_options")
-        options = raw_options if isinstance(raw_options, dict) else {}
-        cleanup_swe_mini_task_target(
-            options.get("pi_bench_dir", self.pi_bench_dir),
-            options.get("task_target"),
-        )
-
     def _release_interrupted_model_protection(self, job: dict[str, Any]) -> None:
         raw_protection = job.get("model_protection")
         if not isinstance(raw_protection, dict) or raw_protection.get("state") not in {
@@ -1070,14 +860,6 @@ class JobManager:
             or job.get("lemonade_base_url")
             or self.openai_base_url
         )
-        if self._job_suite(job) == SWE_MINI_SUITE:
-            lifecycle_env = swe_mini_model_lifecycle_env(
-                self._swe_request_from_job(job)
-            )
-            judge_model = str(lifecycle_env.get(SWE_JUDGE_MODEL_ENV) or "").strip()
-            if judge_model and judge_model != model_id:
-                with suppress(Exception):
-                    self.model_unpinner(base_url, judge_model, MODEL_PIN_TIMEOUT)
         try:
             self.model_unpinner(base_url, model_id, MODEL_PIN_TIMEOUT)
         except Exception as exc:
@@ -1162,11 +944,6 @@ class JobManager:
             or job.get("lemonade_base_url")
             or self.openai_base_url
         )
-        judge_model = str(env.get(SWE_JUDGE_MODEL_ENV) or "").strip()
-        if judge_model and judge_model != model_id:
-            with suppress(Exception):
-                self.model_unpinner(base_url, judge_model, MODEL_PIN_TIMEOUT)
-
         raw_protection = job.get("model_protection")
         protection: dict[str, Any]
         if isinstance(raw_protection, dict):
@@ -1222,11 +999,7 @@ class JobManager:
             if suite != LEMONADE_BENCH_SUITE:
                 protection_acquired = self._protect_job_model(job)
             self._raise_if_cancelled(job_id)
-            if protection_acquired and suite == SWE_MINI_SUITE:
-                env.update(
-                    swe_mini_model_lifecycle_env(self._swe_request_from_job(job))
-                )
-            if suite in {LEMONADE_BENCH_SUITE, SWE_MINI_SUITE}:
+            if suite == LEMONADE_BENCH_SUITE:
                 returncode = self._launch_command(
                     job_id, job["command"], env, Path(job["log_path"])
                 )
@@ -1271,11 +1044,6 @@ class JobManager:
             self._discover_result_files(job)
         finally:
             self._release_job_model(job, env, protection_acquired)
-            self._cleanup_swe_task_target(job)
-            if suite == SWE_MINI_SUITE:
-                progress = self._swe_mini_progress(job)
-                if progress:
-                    job["swe_progress"] = progress
             finished_at = time.time()
             job["finished_at"] = finished_at
             job["runtime_seconds"] = max(0.0, finished_at - started_at)
@@ -1292,9 +1060,6 @@ class JobManager:
             result_files = find_lemonade_bench_result_files(
                 job.get("output_path") or ""
             )
-        elif suite == SWE_MINI_SUITE:
-            output_path = self._persist_swe_mini_results(job)
-            result_files = find_swe_mini_result_files(output_path)
         else:
             result_files = find_result_files(job.get("output_path") or "")
         job["result_files"] = [str(path) for path in result_files]
@@ -1430,11 +1195,6 @@ class JobManager:
             return build_lemonade_bench_command(
                 self._lemonade_bench_request_from_job(job)
             )[1]
-        if suite == SWE_MINI_SUITE:
-            request = self._swe_request_from_job(job)
-            env = build_swe_mini_command(request)[1]
-            env["LMEVAL_WEBUI_JOB_ID"] = str(job.get("id") or "")
-            return env
         return build_eval_command(self._eval_request_from_job(job), self.project_root)[
             1
         ]
@@ -1512,43 +1272,6 @@ class JobManager:
                 options.get("reload_between_runs"), True
             ),
             log_responses=self._optional_bool(options.get("log_responses"), False),
-        )
-
-    def _swe_request_from_job(self, job: dict[str, Any]) -> SweMiniRequest:
-        raw_options = job.get("swe_options")
-        options = raw_options if isinstance(raw_options, dict) else {}
-        return SweMiniRequest(
-            model_id=str(job.get("model_id") or ""),
-            task_target=str(options.get("task_target") or ""),
-            output_path=str(job.get("output_path") or ""),
-            pi_bench_dir=options.get("pi_bench_dir") or self.pi_bench_dir,
-            project_root=self.project_root,
-            openai_base_url=str(
-                options.get("openai_base_url")
-                or job.get("openai_base_url")
-                or self.openai_base_url
-            ),
-            provider=str(options.get("provider") or "lemonade"),
-            judge_model=normalize_swe_mini_judge_model(
-                str(options.get("judge_model") or DEFAULT_SWE_MINI_JUDGE_MODEL)
-            ),
-            platform=str(options.get("platform") or DEFAULT_SWE_MINI_PLATFORM),
-            model_tag=str(options.get("model_tag") or job.get("id") or ""),
-            timeout_minutes=self._int_or_default(
-                options.get("timeout_minutes"), DEFAULT_SWE_MINI_TIMEOUT_MINUTES
-            ),
-            pass_count=self._int_or_default(options.get("pass_count"), 1),
-            context_window=self._int_or_default(
-                options.get("context_window"), DEFAULT_SWE_MINI_CONTEXT_WINDOW
-            ),
-            max_output_tokens=self._int_or_default(
-                options.get("max_output_tokens"),
-                DEFAULT_SWE_MINI_MAX_OUTPUT_TOKENS,
-            ),
-            provider_timeout_minutes=self._int_or_default(
-                options.get("provider_timeout_minutes"),
-                DEFAULT_SWE_MINI_PROVIDER_TIMEOUT_MINUTES,
-            ),
         )
 
     @staticmethod
@@ -1724,23 +1447,6 @@ class JobManager:
             server_model_id = str(options.get("server_model_id") or "").strip()
             if model_id and server_model_id:
                 payload["lemonade_model_ids"] = {model_id: server_model_id}
-        elif suite == SWE_MINI_SUITE:
-            raw_options = job.get("swe_options")
-            options = raw_options if isinstance(raw_options, dict) else {}
-            option_map = {
-                "judge_model": "judge_model",
-                "platform": "platform",
-                "pass_count": "pass_count",
-                "timeout_minutes": "swe_timeout",
-                "context_window": "context_window",
-                "max_output_tokens": "max_output_tokens",
-                "provider_timeout_minutes": "swe_provider_timeout",
-                "provider": "swe_provider",
-                "openai_base_url": "openai_base_url",
-            }
-            for source_key, payload_key in option_map.items():
-                if source_key in options:
-                    payload[payload_key] = options[source_key]
         else:
             options = job.get("eval_options")
             if not isinstance(options, dict):
@@ -1789,8 +1495,6 @@ class JobManager:
         suite = self._job_suite(job)
         if suite == LEMONADE_BENCH_SUITE:
             return self._lemonade_bench_progress(job)
-        if suite == SWE_MINI_SUITE:
-            return self._swe_mini_progress(job)
 
         raw_progress = job.get("batch_progress")
         if not isinstance(raw_progress, dict):
@@ -1843,8 +1547,6 @@ class JobManager:
         return progress
 
     def _lm_eval_request_progress(self, job: dict[str, Any]) -> dict[str, Any] | None:
-        if self._job_suite(job) == SWE_MINI_SUITE:
-            return None
         if job.get("status") not in {"running", "cancelling"}:
             return None
 
@@ -1873,39 +1575,6 @@ class JobManager:
             progress["batch"] = current_batch
         return progress
 
-    def _swe_mini_progress(self, job: dict[str, Any]) -> dict[str, Any] | None:
-        total = len(job.get("tasks") or [])
-        persisted = job.get("swe_progress")
-        if isinstance(persisted, dict) and job.get("status") in TERMINAL_JOB_STATUSES:
-            return persisted
-        if job.get("status") == "succeeded" and total:
-            return self._progress_payload(total, total, total, "tasks")
-
-        current = 0
-        completed = 0
-        log_tail = self.get_log(str(job.get("id") or ""), max_chars=200000)
-
-        complete_matches = list(SWE_MINI_COMPLETE_RE.finditer(log_tail))
-        if complete_matches:
-            match = complete_matches[-1]
-            total = self._int_or_default(match.group(1), total)
-            current = total
-            completed = total
-        else:
-            progress_matches = list(SWE_MINI_PROGRESS_RE.finditer(log_tail))
-            if progress_matches:
-                match = progress_matches[-1]
-                current = self._nonnegative_int(match.group(1))
-                total = self._nonnegative_int(match.group(2), total)
-                completed = max(0, current - 1)
-            elif job.get("status") == "succeeded" and total:
-                current = total
-                completed = total
-
-        if total <= 0:
-            return None
-        return self._progress_payload(current, total, completed, "tasks")
-
     @staticmethod
     def _progress_payload(
         current: int, total: int, completed: int, unit: str
@@ -1922,46 +1591,10 @@ class JobManager:
             "percent": (current / total) * 100,
         }
 
-    def _swe_mini_result_files(self, job: dict[str, Any]) -> list[Path]:
-        result_files = [
-            Path(str(path))
-            for path in job.get("result_files", [])
-            if Path(str(path)).exists()
-        ]
-        if result_files:
-            return result_files
-        output_path = self._persist_swe_mini_results(job)
-        result_files = find_swe_mini_result_files(output_path)
-        if result_files:
-            job["result_files"] = [str(path) for path in result_files]
-            self._write_job(job)
-        return result_files
-
-    def _persist_swe_mini_results(self, job: dict[str, Any]) -> Path:
-        """Copy SWE Mini result artifacts from workspace storage into /data/runs."""
-
-        raw_source = str(job.get("output_path") or "").strip()
-        persistent_path = self.runs_dir / str(job["id"])
-        if not raw_source:
-            return persistent_path
-        source = Path(raw_source)
-        if source.exists() and source not in {Path("."), persistent_path}:
-            persistent_path.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source, persistent_path, dirs_exist_ok=True)
-            job["pi_bench_output_path"] = str(source)
-            job["output_path"] = str(persistent_path)
-            raw_options = job.get("swe_options")
-            if isinstance(raw_options, dict):
-                raw_options["pi_bench_output_path"] = str(source)
-        result_path = persistent_path if persistent_path.exists() else source
-        write_swe_mini_summary(result_path, scheduled_tasks=len(job.get("tasks") or []))
-        return result_path
-
     def _remove_job_artifacts(self, job: dict[str, Any]) -> None:
         for key in (
             "log_path",
             "output_path",
-            "pi_bench_output_path",
             "telemetry_path",
         ):
             raw_path = job.get(key)
