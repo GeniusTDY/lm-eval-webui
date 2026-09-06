@@ -2,7 +2,7 @@
 
 纯 Python 标准库实现的轻量 WebUI，用于对模型运行 **Lemonade Bench** 与 **lm-eval** 两种基准测试，各自有独立排行榜与明细结果视图。
 
-> **文档**：部署见 [`docs/deployment.md`](docs/deployment.md)（局域网 pip 源 / 全离线 / 公网，含 Windows・Linux）；使用见 [`docs/tutorial.md`](docs/tutorial.md)。一键脚本：`scripts/deploy.sh`（Linux）、`scripts/deploy.ps1`（Windows）。
+> **文档**：部署见 [`docs/deployment.md`](docs/deployment.md)（局域网 pip 源 / 全离线 / 公网）；使用见 [`docs/tutorial.md`](docs/tutorial.md)。一键脚本：`scripts/deploy.sh`（Linux）。
 
 ## 目录
 

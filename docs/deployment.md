@@ -1,12 +1,12 @@
 # 部署方案
 
-面向 **Linux / Windows** 的部署指南，按网络条件选一条路径即可。
+面向 **Linux** 的部署指南，按网络条件选一条路径即可。
 
 ## 场景速查
 
 | 网络约束 | pip 依赖来源 | 推荐路径 | 一键脚本 |
 | --- | --- | --- | --- |
-| 无外网，有局域网 pip 源 | 局域网源 | **场景一**（首选） | `deploy.sh` / `deploy.ps1` |
+| 无外网，有局域网 pip 源 | 局域网源 | **场景一**（首选） | `deploy.sh` |
 | 完全无网络 | 打包机预生成的 `offline/pip` | 场景二 | `install_offline.sh` |
 | 可访问公网 | PyPI | 场景三 | 手动安装 |
 
@@ -40,19 +40,13 @@
 
 适用「无外网、有私有 pip 镜像」。依赖统一从局域网源拉取；仅 `tinyBenchmarks`（`git+` 源）从自带副本本地安装。
 
-**前置**：Windows 或 Linux；Python 3.13+（推荐 3.14）；局域网源最好为完整 PyPI 同步。
+**前置**：Linux；Python 3.13+（推荐 3.14）；局域网源最好为完整 PyPI 同步。
 
 **Linux／macOS**
 
 ```bash
 # 第 1 参数为局域网源；也可用 $LMEVAL_WEBUI_PIP_INDEX 或 $PIP_INDEX_URL
 ./scripts/deploy.sh http://<局域网pip源>/simple
-```
-
-**Windows**（PowerShell）
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 http://<局域网pip源>/simple
 ```
 
 **脚本做了**：建 `.venv` → 从局域网源装依赖（跳过 `git+` 行）→ 本地装 vendored tinyBenchmarks → 校验 `offline/READY` 进入全离线模式。
@@ -62,13 +56,7 @@ powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 http://<局域网pip
 **启动 WebUI**
 
 ```bash
-# Linux
 .venv/bin/python -m lm_eval_webui --host 0.0.0.0 --port 8080 --openai-base-url http://<模型主机>:11434/v1
-```
-
-```powershell
-# Windows（PowerShell）
-.\.venv\Scripts\python.exe -m lm_eval_webui --host 0.0.0.0 --port 8080 --openai-base-url http://<模型主机>:11434/v1
 ```
 
 打开 `http://<机器IP>:8080`。本场景**不依赖 `offline/pip`**。
@@ -131,8 +119,6 @@ python -m venv .venv
 OPENAI_BASE_URL="https://host" .venv/bin/python -m lm_eval_webui
 ```
 
-Windows 将 `.venv/bin/*` 换成 `.venv\Scripts\*`。
-
 **Docker Compose**
 
 ```bash
@@ -157,8 +143,7 @@ kubectl apply -f deploy/k8s/namespace.yaml deploy/k8s/pvc.yaml deploy/k8s/servic
 | 症状 | 处理 |
 | --- | --- |
 | 局域网 pip 装不上/超时 | 确认 `--index-url`/`$LMEVAL_WEBUI_PIP_INDEX` 指向内网镜像且为完整 PyPI 同步；必要时 `--extra-index-url` 合并多源 |
-| `git+...tinyBenchmarks` 下载失败 | 无外网属正常；`deploy.sh`/`deploy.ps1` 已跳过该行，改装本地 `offline/vendor/tinyBenchmarks` |
-| Windows 找不到 `python` | 未加 PATH；用 `py -3` 启动器，或重装时勾选 Add to PATH |
+| `git+...tinyBenchmarks` 下载失败 | 无外网属正常；`deploy.sh` 已跳过该行，改装本地 `offline/vendor/tinyBenchmarks` |
 | `No module named 'requests'`/`aiohttp` | 用一键脚本生成的 `.venv` 重装依赖 |
 | 无法加载模型 | 后端未启动或 `--openai-base-url` 不对；确认 `http://<后端>:11434/v1/models` 可访问 |
 | `datasets 5.x` 不支持脚本式数据集 | 在线脚本式数据集已禁用；改用本地任务 `livecodebench_local` |
